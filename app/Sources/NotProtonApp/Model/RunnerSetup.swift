@@ -1,4 +1,4 @@
-// Clones CrossOver, throws it in bridge, invokes ntdll patch,
+// Copies the Wine runtime, stages the bridge and applies verified ntdll patches.
 
 import Foundation
 
@@ -80,7 +80,7 @@ enum RunnerSetup {
         let root = SupportPaths.clonedRoot(forBuild: build.id, runners: runners)
         let status = license?(root) ?? build.runtime.runtime.accessStatus(root: root)
         guard status.licensed else {
-            throw StepFailure(step: String(localized: "Verify CrossOver license"), detail: status.detail)
+            throw StepFailure(step: String(localized: "Verify runtime access"), detail: status.detail)
         }
 
         try verify(build, root)

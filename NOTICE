@@ -68,3 +68,19 @@ licenses remain in place. Modification history: https://github.com/flymedia-us/n
 
 Neutron checks for updates by opening its own GitHub releases page. It does not
 embed the upstream app's Sparkle updater or trust the upstream publisher's key.
+
+Bundled binary notices
+======================
+
+Neutron app bundles include the original licenses and notices under
+Contents/Resources/Licenses, plus an exact source revision and build references.
+Font notices remain alongside the font files.
+
+Dobby, used by the native integration, is licensed under Apache-2.0:
+https://github.com/jmpews/Dobby (pinned commit in the app build workflow).
+The bundled Dobby/LICENSE preserves its original terms. Single-file JsonCpp and
+cJSON sources with their copyright headers are also bundled verbatim as notices.
+
+Wine runtime provenance includes work by Wine authors and CodeWeavers. External
+engine names, legacy prefix paths and identifiers retain upstream spelling where
+required for compatibility; they are not Neutron marketing or an endorsement.

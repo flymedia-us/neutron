@@ -76,9 +76,9 @@ enum PrefixPrompt {
 
     static func rebuildMessage() -> String {
         sentences([
-            String(localized: "This tool is intended to repair a prefix after switching between Rosetta/FEX CrossOver."),
-            String(localized: "It will replace the DLLs used by CrossOver with ones that match your compatibility tool."),
-            String(localized: "This can also fix issues where a game previously started/worked and does not work now, even if you did not switch CrossOver types."),
+            String(localized: "This tool repairs a prefix after changing Wine runtimes or processor architectures."),
+            String(localized: "It replaces runtime DLLs with ones that match your compatibility tool."),
+            String(localized: "It can also repair a prefix when a previously working game stops launching."),
             String(localized: "You will not lose saves by using this tool."),
         ])
     }

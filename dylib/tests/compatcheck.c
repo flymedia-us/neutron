@@ -347,19 +347,23 @@ static void stale_tool_cases(void) {
         check(0, "the tools directory fixture can be made");
         return;
     }
-    char current[700], legacy[700], user[700], lookalike[700];
+    char current[700], legacy[700], modern[700], user[700], lookalike[700];
     snprintf(current, sizeof(current), "%s/neutron-26.3", root);
     snprintf(legacy, sizeof(legacy), "%s/neutron", root);
     snprintf(user, sizeof(user), "%s/neutron-mine", root);
     snprintf(lookalike, sizeof(lookalike), "%s/neutron-copy", root);
-    const char *dirs[] = { current, legacy, user, lookalike };
-    for (size_t i = 0; i < 4; i++) mkdir(dirs[i], 0755);
+    snprintf(modern, sizeof(modern), "%s/neutron-modern", root);
+    const char *dirs[] = { current, legacy, modern, user, lookalike };
+    for (size_t i = 0; i < 5; i++) mkdir(dirs[i], 0755);
 
     put(current, "flavor", "rosetta\n");
     put(current, "run", "#!/bin/sh\n# neutron CrossOver compatibility tool shim\n");
     put(legacy, "run", "#!/bin/sh\n# neutron CrossOver compatibility tool shim\nset -e\n");
     put(legacy, "toolmanifest.vdf", "\"manifest\" {}\n");
     put(legacy, "compatibilitytool.vdf", "\"compatibilitytools\" {}\n");
+    put(modern, "run", "#!/bin/sh\n# Neutron Wine compatibility tool launcher\nset -e\n");
+    put(modern, "toolmanifest.vdf", "\"manifest\" {}\n");
+    put(modern, "compatibilitytool.vdf", "\"compatibilitytools\" {}\n");
     put(user, "run", "#!/bin/sh\nexec my-wine \"$@\"\n");
     put(lookalike, "run", "#!/bin/sh\n# neutron CrossOver compatibility tool shim\n");
     put(lookalike, "notes.txt", "mine\n");
@@ -368,6 +372,7 @@ static void stale_tool_cases(void) {
     remove_unlisted_tools(root);
 
     check(!exists(current), "an unlisted tool with a flavor file is removed");
+    check(!exists(modern), "a tool with the current Neutron launcher signature is removed");
     check(!exists(legacy), "the single-tool dylib's directory is removed");
     check(exists(user), "a neutron directory the user wrote stays");
     char notes[768];

@@ -1,4 +1,4 @@
-// Deploys core NotProton components into the copy of CrossOver that NotProton deploys to the Steam location
+// Locates the bundled Neutron components deployed into Steam and the Wine runtime.
 
 import Foundation
 

@@ -110,7 +110,7 @@ struct HighballSourceTests {
 struct HighballNoticeTests {
 
     private func engine(_ id: String, _ support: HighballSupport) -> HighballEngine {
-        HighballEngine(id: id, directory: URL(filePath: "/H/engines/\(id)"), displayName: id, support: support)
+        HighballEngine(id: id, directory: URL(filePath: "/H/engines/\(id)"), displayName: "Wine 11 r99", support: support)
     }
 
     @Test("Only Wine 10 engines asks for the Wine 11 engine")
@@ -122,7 +122,7 @@ struct HighballNoticeTests {
     @Test("An unsupported Wine 11 engine is named")
     func unsupportedWine11() {
         let notice = SystemStatus.highballNotice(engines: [engine("x64-crossover26.3-r99", .unsupported)])
-        #expect(notice?.contains("x64-crossover26.3-r99") == true)
+        #expect(notice?.contains("Wine 11 r99") == true)
     }
 
     @Test("A supported engine needs no notice")

@@ -609,7 +609,9 @@ APP_BUNDLE_PAYLOAD := $(APP_BUNDLE)/Contents/Resources/NotProtonApp_NotProtonApp
 APP_ZIP     := $(OUT_DIR)/Neutron.zip
 APP_VERSION := $(shell sed -n 's/^\#define NOTPROTON_VERSION "\(.*\)"/\1/p' dylib/version.h)
 
-APP_SIGN_ID ?= -
+APP_SIGN_ID ?= auto
+APP_SIGN_TEAM ?= BJZSH247Q9
+APP_REQUIRE_TEAM ?= 0
 
 ICONGEN  := $(OUT_DIR)/icongen
 ICON_DOC := $(OUT_DIR)/Neutron.icon
@@ -663,9 +665,15 @@ app: app-payload $(ICON_CAR)
 		exit 1; \
 	fi
 	@echo "==> Payload complete in the bundle"
-	codesign -f -s "$(APP_SIGN_ID)" "$(APP_BUNDLE)"
-	codesign --verify --strict "$(APP_BUNDLE)"
+	python3 scripts/bundle-notices.py "$(APP_BUNDLE)/Contents/Resources/Licenses" \
+		--highball "$(HIGHBALL_PKG)" --dobby vendor/dobby
+	python3 scripts/sign-app.py "$(APP_BUNDLE)" --identity "$(APP_SIGN_ID)" \
+		--team "$(APP_SIGN_TEAM)" --require-team "$(APP_REQUIRE_TEAM)"
 	@echo "==> Built $(APP_BUNDLE) ($(APP_VERSION))"
+
+.PHONY: app-flymedia
+app-flymedia:
+	$(MAKE) APP_SIGN_ID=auto APP_REQUIRE_TEAM=1 app-zip
 
 app-zip: app
 	rm -f "$(APP_ZIP)"

@@ -1,5 +1,5 @@
 #!/bin/sh
-# neutron CrossOver compatibility tool shim
+# Neutron Wine compatibility tool launcher
 set -e
 
 verb="$1"
@@ -158,7 +158,7 @@ fi
 case "$np_runtime" in ''|*[!a-z]*) np_runtime=crossover ;; esac
 np_display=$(sed -n 's/.*"display_name"[[:space:]]*"\(.*\)".*/\1/p' \
   "$np_tool_dir/compatibilitytool.vdf" 2>/dev/null | head -1) || np_display=""
-[ -n "$np_display" ] || np_display="CrossOver build ${np_build:-unknown}"
+[ -n "$np_display" ] || np_display="Wine build ${np_build:-unknown}"
 CX_ROOT="$np_support/runners/$np_runtime-$np_build/root"
 export CX_ROOT
 # CrossOver initializes Rosetta's Windows thread-state support even without D3DMetal.
@@ -287,8 +287,8 @@ prefix_machine() {
 
 tool_name() {
   case "$1" in
-    aa64) printf 'the FEX build of CrossOver' ;;
-    8664) printf 'the Rosetta build of CrossOver' ;;
+    aa64) printf 'the FEX Wine build' ;;
+    8664) printf 'the Rosetta Wine build' ;;
     *) printf 'an older 32-bit setup' ;;
   esac
 }
@@ -328,12 +328,12 @@ last_wine_build() {
   case "$updated" in '' | *[!0-9]*) return 0 ;; esac
   [ "$updated" = "$(stat -f %m "$CX_ROOT/share/wine/wine.inf" 2>/dev/null)" ] && return 0
   had_build=other
-  had_display="another version of CrossOver"
+  had_display="another Wine runtime"
   for inf in "$np_support"/runners/*-*/root/share/wine/wine.inf; do
     [ "$(stat -f %m "$inf" 2>/dev/null)" = "$updated" ] || continue
     if [ "$had_build" != other ]; then
       had_build=other
-      had_display="another version of CrossOver"
+      had_display="another Wine runtime"
       break
     fi
     had_build=${inf#"$np_support/runners/"}
@@ -358,7 +358,7 @@ refuse_other_build() {
   fi
   if [ -n "$had_build" ] && [ "$had_build" != "$np_build" ]; then
     echo "=== prefix was last run by build $had_build and this compatibility tool runs $np_build, rebuild the prefix in Neutron ===" >> "$log" 2>&1 || true
-    had_display=$(alert_safe "${had_display:-CrossOver build $had_build}")
+    had_display=$(alert_safe "${had_display:-Wine build $had_build}")
     show_alert "This game needs its prefix rebuilt" "This game's prefix was last run by $had_display, and this compatibility tool runs $(alert_safe "$np_display"). Rebuild the prefix in Neutron to run it here, or pick $had_display again in the game's Compatibility settings. You will not lose game saves by rebuilding the prefix."
     exit 1
   fi
@@ -724,7 +724,7 @@ import_prefix_settings() {
 stage_step="runner check"
 if [ -z "$np_build" ] || [ ! -d "$CX_ROOT/lib/wine" ]; then
   echo "=== build ${np_build:-(none recorded)} behind this compatibility tool is not set up, set it up in Neutron ===" >> "$log" 2>&1 || true
-  show_alert "CrossOver is not set up" "The CrossOver build behind $(alert_safe "$np_display") is not set up. Set it up in Neutron, or pick another compatibility tool for this game."
+  show_alert "Wine runtime is not set up" "The Wine build behind $(alert_safe "$np_display") is not set up. Set it up in Neutron, or pick another compatibility tool for this game."
   exit 1
 fi
 echo "runner: build $np_build ($np_display) at $CX_ROOT" >> "$log" 2>&1 || true
@@ -740,7 +740,7 @@ tighten_wine_tmp() {
 }
 tighten_wine_tmp "/tmp/.wine-$(id -u)"
 
-# Each CrossOver build needs its own template.
+# Each pinned Wine build needs its own template.
 # FEX builds need two, one for FEX/arm64 Wine and one for Rosetta/AMD64 Wine
 runner_id=""
 [ -z "$np_build" ] || runner_id="$np_runtime-$np_build-${wine_unix##*/}"
@@ -1530,7 +1530,7 @@ if [ "$foreground" = 0 ]; then
   exit $status
 fi
 
-# Fixes CrossOver window focus issues
+# Fixes Wine window focus issues
 steam_root="$(dirname "$(dirname "$(dirname "$STEAM_COMPAT_DATA_PATH")")")"
 manifest="$steam_root/steamapps/appmanifest_$app_id.acf"
 find_client_root "$STEAM_COMPAT_CLIENT_INSTALL_PATH"

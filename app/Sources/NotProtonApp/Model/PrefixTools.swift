@@ -75,7 +75,7 @@ enum PrefixTools {
                 return PrefixBuildRecord(build: build, display: nil)
             }
         }
-        return PrefixBuildRecord(build: "", display: String(localized: "another version of CrossOver"))
+        return PrefixBuildRecord(build: "", display: String(localized: "another Wine runtime"))
     }
 
     static func writeBuildRecord(_ tool: InstalledTool, for prefix: WinePrefix) throws {

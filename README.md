@@ -9,7 +9,7 @@ Neutron is a fork of NotProton by [NotProtonNot](https://github.com/NotProtonNot
 You need an Apple Silicon Mac, macOS 15 or later, Steam for macOS, and Rosetta 2.
 
 1. Download `Neutron.zip` from this repository's Releases and move `Neutron.app` to Applications. Until a release is published, build from source below or use a successful Actions build artifact.
-2. Open Neutron. Builds are ad hoc signed; macOS may require **Privacy & Security → Open Anyway**. Allow App Management when requested, because Neutron patches Steam.
+2. Open Neutron. CI builds are ad hoc signed; macOS may require **Privacy & Security → Open Anyway**. Allow App Management when requested, because Neutron patches Steam.
 3. Click **Set Up Neutron**. Read Apple's D3DMetal license and choose whether to accept it. Neutron installs the Steam integration, downloads or reuses Highball's engine, verifies its downloads, sets up the compatibility tool, and makes it the default when Steam has none. No separate Highball app is needed.
 4. Start Steam normally from its Mac app. Windows-only games show Play. For a game with a native Mac version, select Neutron's Highball tool under **Properties → Compatibility** to use the Windows version.
 
@@ -40,6 +40,8 @@ It uses the repository's `GITHUB_TOKEN`. When repository and organization policy
 
 ## Build and test
 
+See [BUILDING.md](BUILDING.md) for Fly Media signing and [SECURITY.md](SECURITY.md) for repository protections and private security reports. Original component notices are included in every app bundle; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 Use Xcode 27 or newer. The build pins HighballKit and engine manifests; do not substitute engine files without updating the verified hashes and detours.
 
 ```sh
@@ -49,12 +51,16 @@ git -C vendor/dobby checkout 5dfc8546954ce3b3198132ab13fddb89ee92cdd7
 make dobby all overlay-shim iconmaker appinfo bridge
 # Font generation also needs the pinned Python packages used in .github/workflows/app.yml.
 make fonts app
+# On a configured Fly Media Mac, require the company signing identity:
+make app-flymedia
 make app-tests seedcheck envcheck settingscheck bridgecheck gamedrivecheck launchercheck brandcheck synccheck
 ```
 
 The full app workflow builds and packages `Neutron.zip`. The release workflow is an explicit manual dispatch and publishes prereleases only. Neutron does not reuse another publisher's update-signing key or Homebrew tap.
 
 ## Changes from upstream
+
+- 2026-10-16: Alpha 2 removes unused paid-engine status/setup code and unnecessary branding in dialogs and the Steam UI; bundles original notices and source references; verifies Fly Media signing for local builds; pins CI actions and protects main through PRs and required checks.
 
 - 2026-10-16: Fly Media Neutron identity, Highball-only guided setup, removal of funding/purchase prompts and paid-engine choices, explicit Neutron updates, direct NotProton sync, exFAT prefix fixes, complete Highball template environment, and the tested Tetris Effect renderer default.
 

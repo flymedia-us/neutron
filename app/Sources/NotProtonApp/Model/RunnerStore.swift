@@ -1,4 +1,4 @@
-// Checks CrossOver state for status display
+// Checks installed Wine runtime state for status display
 
 import Foundation
 
@@ -126,7 +126,7 @@ enum CompatToolList {
     }
 
     // 1.0.x used the single 'notproton' tool name and wrote no tool list, so the
-    // runners/current symlink is the record of which version of CrossOver was deployed.
+    // runners/current symlink is the record of which legacy Wine build was deployed.
     static func legacyHolder(
         builds: [RunnerBuild], listed: String?, runners: URL = SupportPaths.runners
     ) -> SupportedRunners.LegacyHolder {

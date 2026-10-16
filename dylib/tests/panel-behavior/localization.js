@@ -33,8 +33,8 @@ for (const form of Object.keys(FORMS)) {
       hud.props.onChange(true);
       assert.equal(written.at(-1).opts, 'MTL_HUD_ENABLED=1 CX_GRAPHICS_BACKEND=dxmt %command%');
       for (const [mode, en, zh] of [
-        ['compat-hint', 'Enable CrossOver under Properties > Compatibility to install and run the Windows version.',
-          '请在“属性 > 兼容性”中启用 CrossOver，以安装并运行 Windows 版本。'],
+        ['compat-hint', 'Select Neutron Highball under Properties > Compatibility to install and run the Windows version.',
+          '请在“属性 > 兼容性”中选择 Neutron Highball，以安装并运行 Windows 版本。'],
         ['image-files-label', 'Image Files (*.tga,*.png,*.exe)', '图像文件 (*.tga,*.png,*.exe)'],
       ]) {
         const src = execFileSync(emit, [mode], { encoding: 'utf8' });

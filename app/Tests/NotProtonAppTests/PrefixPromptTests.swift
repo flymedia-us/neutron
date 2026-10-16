@@ -62,7 +62,7 @@ struct PrefixPromptTests {
         let message = PrefixPrompt.rebuildMessage()
         #expect(PrefixPrompt.rebuildTitle([ikaruga]) == "Rebuild the prefix for IKARUGA?")
         #expect(PrefixPrompt.rebuildButton([ikaruga]) == "Rebuild Prefix")
-        #expect(message.contains("switching between Rosetta/FEX CrossOver"))
+        #expect(message.contains("changing Wine runtimes or processor architectures"))
         #expect(message.contains("You will not lose saves by using this tool."))
         #expect(!message.contains("Steam"))
         #expect(!message.contains("Continue"))

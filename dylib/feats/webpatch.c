@@ -251,7 +251,7 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     "const n=v||d.default_tool_identifier||\"" NP_FALLBACK_TOOL "\",a=(d.aliases||[]).find(x=>x.alias===n)," \
     "t=globalThis.appDetailsStore?.GetAppDetails(id);t&&MSCXPick(t,a?a.current_tool_name:n)}]"
 
-// CrossOver options panel. Not in great shape, but it'll do
+// Per-game Wine compatibility options panel.
 #define NP_WEB_IS_ZH \
     "(()=>{const l=(globalThis.document?.documentElement?.lang||" \
     "globalThis.navigator?.language||\"\").toLowerCase().replace(/_/g,\"-\");" \
@@ -260,8 +260,8 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
 #define NP_WEB_TEXT(EN, ZH) "(" NP_WEB_IS_ZH "?\"" ZH "\":\"" EN "\")"
 
 #define NP_COMPAT_HINT NP_WEB_TEXT( \
-    "Enable CrossOver under Properties > Compatibility to install and run the Windows version.", \
-    "请在“属性 > 兼容性”中启用 CrossOver，以安装并运行 Windows 版本。")
+    "Select Neutron Highball under Properties > Compatibility to install and run the Windows version.", \
+    "请在“属性 > 兼容性”中选择 Neutron Highball，以安装并运行 Windows 版本。")
 
 #define NP_IMAGE_FILES_LABEL NP_WEB_TEXT( \
     "Image Files (*.tga,*.png,*.exe)", "图像文件 (*.tga,*.png,*.exe)")
@@ -349,7 +349,7 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     "var MSCXToolQuery=" NP_CX_TOOL_QUERY ";" \
     "var MSCXOpts=" NP_CX_OPTIONS_CAPTURE(NP_C3, NP_C4) ";"
 
-// 1.0.x saved CrossOver settings without %command%, this migrates them.
+// Legacy 1.0.x saved Wine settings without %command%; migrate them.
 #define NP_LAUNCH_MIGRATION_RULE \
     "o=>{const T=/(?:[^\\s\"'\\\\]|\\\\[^]|\"(?:[^\"\\\\]|\\\\[^])*\"|'[^']*')+/g," \
     "w=o.match(T)||[]," \

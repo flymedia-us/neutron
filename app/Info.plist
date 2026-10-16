@@ -21,6 +21,8 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>Neutron</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Neutron modifications © 2026 Fly Media LLC. Includes upstream components; see bundled licenses and credits.</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
