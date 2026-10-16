@@ -151,6 +151,7 @@ SCRIPTS := $(shell git ls-files '*.sh' 2>/dev/null | grep -v '^dylib/feats/compa
 
 synccheck:
 	@sh scripts/sync/test-sync.sh
+	@sh scripts/sync/test-db-refresh.sh
 
 scriptcheck:
 	@if ! command -v shellcheck >/dev/null 2>&1; then \

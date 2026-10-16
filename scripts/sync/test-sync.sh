@@ -21,6 +21,9 @@ case "$1 $2" in
   "issue list") cat "$STUB_DIR/issues" 2>/dev/null ;;
   "pr list") cat "$STUB_DIR/prs" 2>/dev/null ;;
   "release list") cat "$STUB_DIR/releases" 2>/dev/null ;;
+  "api repos/gauthierpiarrette/highball/git/ref/tags/"*)
+    if [ -f "$STUB_DIR/annotated" ]; then printf 'tag %040d\n' 2; else printf 'commit %040d\n' 1; fi ;;
+  "api repos/gauthierpiarrette/highball/git/tags/"*) printf 'commit %040d\n' 1 ;;
   "api repos/gauthierpiarrette/highball-db/commits/main") cat "$STUB_DIR/dbhead" 2>/dev/null ;;
   "pr create")
     if [ -f "$STUB_DIR/block-pr" ]; then echo 'Organization policy blocks PR creation' >&2; exit 1; fi
@@ -116,16 +119,16 @@ hb() {   # pinned-kit db-commit
   printf '        .package(url: "https://github.com/gauthierpiarrette/highball", exact: "%s"),\n' "$1" > "$work/hb/app/Package.swift"
   printf 'public static let highballKitVersion = "%s"\n' "$1" > "$work/hb/app/Sources/HighballEnvCore/HighballEnvCore.swift"
   printf '{"source":{"commit":"%s"},"games":[],"recipes":[]}\n' "$2" > "$work/hb/third_party/highball-db/highball-db.json"
-  : > "$work/hb/app/Package.resolved"
+  printf '{"pins":[{"identity":"highball","location":"https://github.com/gauthierpiarrette/highball","kind":"remoteSourceControl","state":{"revision":"0000000000000000000000000000000000000000","version":"%s"}}],"version":3}\n' "$1" > "$work/hb/app/Package.resolved"
   git_quiet -C "$work/hb" init -q && git_quiet -C "$work/hb" add -A && git_quiet -C "$work/hb" commit -q -m base
   git_quiet clone -q --bare "$work/hb" "$work/hb-origin.git"
   git_quiet -C "$work/hb" remote add origin "$work/hb-origin.git"
   git_quiet -C "$work/hb" fetch -q origin
 }
-# swift resolve and the database refresh are stubbed: they touch the network
+# A write-capable sync must never execute a Swift manifest; the stub records violations.
 cat > "$work/bin/swift" <<'STUB'
 #!/bin/sh
-echo resolved > app/Package.resolved
+touch "$STUB_DIR/unsafe-resolve"; exit 99
 STUB
 cat > "$work/bin/refresh-db" <<'STUB'
 #!/bin/sh
@@ -145,6 +148,8 @@ printf 'v0.10.16\n' > "$STUB_DIR/releases"
 runhb
 has "a newer Highball release opens a PR" "pr create .* --head sync/highball-0.10.16 " "$STUB_LOG"
 is "the pin is bumped" "1" "$(git -C "$work/hb-origin.git" show sync/highball-0.10.16:app/Package.swift | grep -c 'exact: "0.10.16"')"
+is "the dependency commit is pinned without executing a manifest" "0000000000000000000000000000000000000001" "$(git -C "$work/hb-origin.git" show sync/highball-0.10.16:app/Package.resolved | python3 -c 'import json,sys;print(json.load(sys.stdin)["pins"][0]["state"]["revision"])')"
+is "no package code executes with write credentials" "no" "$([ -f "$STUB_DIR/unsafe-resolve" ] && echo yes || echo no)"
 is "the helper's version constant follows" "1" "$(git -C "$work/hb-origin.git" show sync/highball-0.10.16:app/Sources/HighballEnvCore/HighballEnvCore.swift | grep -c '"0.10.16"')"
 runhb
 hasnt "a second run opens no second PR" "pr create" "$STUB_LOG"
@@ -155,10 +160,20 @@ runhb
 hasnt "an older release is not a downgrade" "pr create" "$STUB_LOG"
 
 hb 0.10.15 aaaaaaa1111
+: > "$STUB_DIR/annotated"
 printf 'v0.10.16\n' > "$STUB_DIR/releases"; printf 'bbbbbbb2222\n' > "$STUB_DIR/dbhead"
 runhb
 has "both newer go in one PR" "--head sync/highball-0.10.16-db-bbbbbbb " "$STUB_LOG"
 is "the snapshot is refreshed" "1" "$(git -C "$work/hb-origin.git" show sync/highball-0.10.16-db-bbbbbbb:third_party/highball-db/highball-db.json | grep -c bbbbbbb2222)"
+
+has "annotated tags are resolved to their commit" "api repos/gauthierpiarrette/highball/git/tags/" "$STUB_LOG"
+rm -f "$STUB_DIR/annotated"
+
+hb 0.10.15 aaaaaaa1111
+printf 'v0.10.16-invalid\n' > "$STUB_DIR/releases"
+runhb
+has "unexpected tags are refused" "refusing an unexpected" "$work/out"
+hasnt "a refused tag opens no PR" "pr create" "$STUB_LOG"
 
 echo "== Highball: blocked PR remains reviewable =="
 hb 0.10.15 aaaaaaa1111

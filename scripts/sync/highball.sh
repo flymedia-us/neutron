@@ -1,18 +1,19 @@
 #!/bin/sh
 # shellcheck disable=SC2016
 # Bumps the HighballKit pin to Highball's latest release and refreshes the highball-db snapshot,
-# in one PR when both changed. Needs swift (package resolve) and the refresh script's network access.
+# in one PR when both changed. Treats upstream files as data: never runs package manifests.
 # Usage: scripts/sync/highball.sh
 set -eu
 cd "$(dirname "$0")/../.."
 # shellcheck source=scripts/sync/common.sh disable=SC1091
 . scripts/sync/common.sh
 
-SWIFT="${SWIFT:-swift}"
 REFRESH_DB="${REFRESH_DB:-scripts/refresh-highball-db.sh}"
 
-latest=$("$GH" release list -R gauthierpiarrette/highball --exclude-pre-releases --limit 1 --json tagName -q '.[0].tagName')
-latest=${latest#v}
+tag=$("$GH" release list -R gauthierpiarrette/highball --exclude-pre-releases --limit 1 --json tagName -q '.[0].tagName')
+latest=${tag#v}
+[ -z "$latest" ] || printf '%s\n' "$latest" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
+  || { echo 'sync: refusing an unexpected Highball release tag' >&2; exit 1; }
 pinned=$(sed -n 's/.*gauthierpiarrette\/highball", exact: "\([^"]*\)".*/\1/p' app/Package.swift)
 [ -n "$pinned" ] || { echo "sync: no HighballKit pin found in app/Package.swift" >&2; exit 1; }
 newer_kit=""
@@ -43,10 +44,34 @@ git_identity
 git checkout -q -B "$branch" origin/main
 notes=""
 if [ -n "$newer_kit" ]; then
+  # Resolve a lightweight or annotated tag to a commit through GitHub's data API.
+  # SwiftPM will validate the graph in read-only CI, without this job's write token.
+  object=$("$GH" api "repos/gauthierpiarrette/highball/git/ref/tags/$tag" -q '.object | .type + " " + .sha')
+  depth=0
+  while :; do
+    kind=${object%% *}; revision=${object#* }
+    case "$revision" in ''|*[!a-f0-9]*) echo 'sync: invalid package revision' >&2; exit 1 ;; esac
+    [ "${#revision}" -eq 40 ] || { echo 'sync: invalid package revision length' >&2; exit 1; }
+    [ "$kind" != commit ] || break
+    [ "$kind" = tag ] && [ "$depth" -lt 4 ] || { echo 'sync: release does not resolve to a commit' >&2; exit 1; }
+    depth=$((depth + 1))
+    object=$("$GH" api "repos/gauthierpiarrette/highball/git/tags/$revision" -q '.object | .type + " " + .sha')
+  done
   sed -i.bak "s/gauthierpiarrette\/highball\", exact: \"$pinned\"/gauthierpiarrette\/highball\", exact: \"$newer_kit\"/" app/Package.swift
   sed -i.bak "s/highballKitVersion = \"$pinned\"/highballKitVersion = \"$newer_kit\"/" app/Sources/HighballEnvCore/HighballEnvCore.swift
   rm -f app/Package.swift.bak app/Sources/HighballEnvCore/HighballEnvCore.swift.bak
-  "$SWIFT" package --package-path app resolve >/dev/null
+  python3 -I - "$newer_kit" "$revision" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path('app/Package.resolved')
+data = json.loads(path.read_text())
+pins = [p for p in data['pins'] if p['identity'] == 'highball']
+if len(pins) != 1 or pins[0]['location'].removesuffix('.git') != 'https://github.com/gauthierpiarrette/highball':
+    sys.exit('sync: unexpected Highball dependency identity')
+pins[0]['state'] = {'version': sys.argv[1], 'revision': sys.argv[2]}
+# A manifest change invalidates SwiftPM's originHash. Let read-only CI regenerate it.
+data.pop('originHash', None)
+path.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n')
+PY
   git add app/Package.swift app/Package.resolved app/Sources/HighballEnvCore/HighballEnvCore.swift
   notes="$notes- HighballKit $pinned → $newer_kit: https://github.com/gauthierpiarrette/highball/releases/tag/v$newer_kit
 "

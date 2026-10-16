@@ -20,7 +20,11 @@ the comparison link in a sync issue. Use merge commits for NotProton sync PRs so
 upstream ancestry is preserved. Releases are manual and limited to `main`.
 
 GitHub Actions use read-only permissions by default and immutable action pins.
-Write access is limited to the sync and publish jobs that need it. Pull requests
+Write access is limited to the sync and publish jobs that need it. Sync treats
+new package manifests as data and resolves release tags through GitHub's API; it
+never runs SwiftPM with write credentials. Upstream database symlinks and paths
+escaping the fetched tree are rejected. Dependency code executes in read-only CI,
+which rejects unexpected pin changes. Pull requests
 never receive signing credentials. Apple signing keys stay in the local macOS
 keychain and are not committed, exported or uploaded to CI.
 
