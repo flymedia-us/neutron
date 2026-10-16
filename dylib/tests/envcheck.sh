@@ -61,12 +61,215 @@ pe vcruntime140_1 "This program cannot be run in DOS mode."
 is "Microsoft's copies load first" "msvcp140=n,b;msvcp140_2=n,b;vcruntime140_1=n,b;" "$(native_vc_runtime)"
 rm -rf "$vc_work"
 
+echo "== Runtime read from the tool directory =="
+# shellcheck disable=SC2016 # Match the literal script lines.
+runtime_read=$(sed -n '/^np_runtime=crossover$/,/^case "$np_runtime"/p' "$SRC")
+# shellcheck disable=SC2016 # Match the literal script line.
+root_line=$(grep -F 'CX_ROOT="$np_support/runners/' "$SRC")
+[ -n "$runtime_read" ] && [ -n "$root_line" ] || { echo "FAIL: runtime read or runner root not found"; exit 1; }
+rt_work=$(mktemp -d)
+np_tool_dir="$rt_work/tool"
+mkdir -p "$np_tool_dir"
+runtime_after() {
+  rm -f "$np_tool_dir/runtime"
+  [ "$1" = "<none>" ] || printf '%b' "$1" > "$np_tool_dir/runtime"
+  eval "$runtime_read"
+  printf '%s' "$np_runtime"
+}
+is "a recorded runtime is used" "highball" "$(runtime_after 'highball\n')"
+is "crossover is read as crossover" "crossover" "$(runtime_after 'crossover\n')"
+is "no runtime file means crossover" "crossover" "$(runtime_after '<none>')"
+is "an empty runtime file means crossover" "crossover" "$(runtime_after '')"
+is "a path in the runtime file cannot leave runners/" "crossover" "$(runtime_after '../x\n')"
+is "a slash in the runtime file cannot leave runners/" "crossover" "$(runtime_after 'a/b\n')"
+np_support=/S; np_runtime=crossover; np_build=26.3.0.39832
+eval "$root_line"
+is "the runner root is runners/<runtime>-<build>/root" "/S/runners/crossover-26.3.0.39832/root" "$CX_ROOT"
+rm -rf "$rt_work"
+
+echo "== Highball runner environment =="
+# shellcheck disable=SC2016 # Match the literal script lines.
+hb_block=$(sed -n '/^# Highball: server in bin/,/^fi # highball$/p' "$SRC")
+[ -n "$hb_block" ] || { echo "FAIL: Highball block not found"; exit 1; }
+hb=$(mktemp -d)
+CX_ROOT="$hb/root"; np_runtime=highball
+mkdir -p "$CX_ROOT/bin" "$CX_ROOT/lib/wine/x86_64-unix" "$CX_ROOT/renderers/dxmt/wine"
+# shellcheck disable=SC2016 # The command substitution is the attack being tested.
+printf 'DYLD_FALLBACK_LIBRARY_PATH=%s/frameworks\nlower=x\n$(touch %s/pwned)=x\nWINEDEBUG=fixme-all\n' "$CX_ROOT" "$hb" > "$CX_ROOT/runtime.env"
+WINELOADER=/wrong; WINESERVER=/wrong; wine_unix=/wrong
+eval "$hb_block"
+is "Highball loader is the x86_64-unix wine, as for CrossOver" "$CX_ROOT/lib/wine/x86_64-unix/wine" "$WINELOADER"
+is "Highball server is bin/wineserver" "$CX_ROOT/bin/wineserver" "$WINESERVER"
+is "Highball unix dir" "$CX_ROOT/lib/wine/x86_64-unix" "$wine_unix"
+is "runtime.env value exported" "$CX_ROOT/frameworks" "$DYLD_FALLBACK_LIBRARY_PATH"
+is "runtime.env never executes" "no" "$([ -e "$hb/pwned" ] && echo yes || echo no)"
+is "DXMT renderer is prepended" "$CX_ROOT/renderers/dxmt/wine" "$WINEDLLPATH_PREPEND"
+is "Windows user is steamuser" "steamuser" "$WINEUSERNAME"
+is "keys from runtime.env are remembered for the game" " DYLD_FALLBACK_LIBRARY_PATH WINEDEBUG" "$np_hb_keys"
+# A user's launch option wins over the engine default; lowercase keys never pass, whatever the locale
+unset -v lower DYLD_FALLBACK_LIBRARY_PATH
+WINEDEBUG=+seh np_hb_keys=""
+eval "$hb_block"
+is "a launch option beats runtime.env" "+seh" "$WINEDEBUG"
+# The locale must be set when the shell starts for pattern ranges to follow it
+# shellcheck disable=SC2016 # Expanded by the child shell.
+leaked=$(LC_ALL=en_US.UTF-8 CX_ROOT="$CX_ROOT" np_runtime=highball hb_block="$hb_block" \
+  sh -c 'eval "$hb_block"; printf %s "${lower:-}"')
+is "a lowercase key is ignored under a UTF-8 locale" "" "$leaked"
+
+echo "== Highball environment reaches the game =="
+hb_forward=$(sed -n '/^# Highball: forward the engine environment/,/^fi # highball forward$/p' "$SRC")
+[ -n "$hb_forward" ] || { echo "FAIL: Highball forwarding block not found"; exit 1; }
+np_hb_keys=" DYLD_FALLBACK_LIBRARY_PATH GST_PLUGIN_PATH"
+GST_PLUGIN_PATH=/F/gst
+set --
+eval "$hb_forward"
+is "engine and runtime keys are passed with --env" \
+  "--env GST_PLUGIN_PATH=/F/gst --env CX_FWD_COMPAT_GL_CTX=1 --env WINEDLLPATH_PREPEND=$CX_ROOT/renderers/dxmt/wine --env WINEUSERNAME=steamuser " \
+  "$(printf '%s ' "$@")"
+# shellcheck disable=SC2016 # Match the literal script lines.
+launcher_text=$(sed -n '/^cat > "$loader_macos\/launcher" <<LAUNCHER$/,/^LAUNCHER$/p' "$SRC")
+case "$launcher_text" in
+  *'DYLD_FALLBACK_LIBRARY_PATH=*|DYLD_FALLBACK_FRAMEWORK_PATH=*) export'*) ok "launcher re-exports the engine's DYLD fallback paths" ;;
+  *) bad "launcher re-exports the engine's DYLD fallback paths" "a DYLD_FALLBACK case in the launcher" "none" ;;
+esac
+launcher_hb='DYLD_INSERT_LIBRARIES=*) export DYLD_INSERT_LIBRARIES='
+# shellcheck disable=SC2016 # Match the literal launcher text.
+case "$launcher_text" in
+  *"$launcher_hb"*'done < "$np_hb_env_file"'*) ok "launcher takes DYLD values from Highball's file for the game" ;;
+  *) bad "launcher takes DYLD values from Highball's file for the game" "a np_hb_env_file loop" "none" ;;
+esac
+
+echo "== Highball's own launch environment (highball-env) =="
+hb_env_fn=$(sed -n '/^highball_environment() {$/,/^} # highball_environment$/p' "$SRC")
+[ -n "$hb_env_fn" ] || { echo "FAIL: highball_environment not found"; exit 1; }
+# shellcheck disable=SC2016 # Match the literal script lines.
+hb_call=$(sed -n '/^  if \[ "$np_runtime" = highball \]; then$/,/^  fi$/p' "$SRC")
+case "$hb_call" in
+  *highball_environment*) ok "highball-env runs only for Highball runners" ;;
+  *) bad "highball-env runs only for Highball runners" "a call guarded by np_runtime = highball" "$hb_call" ;;
+esac
+eval "$hb_env_fn"
+np_support="$hb/support"; STEAM_COMPAT_DATA_PATH="$hb/compat"; WINEPREFIX="$hb/compat/pfx"
+np_build=x64-crossover26.3-r19; app_id=1086940; log="$hb/run.log"
+mkdir -p "$np_support" "$STEAM_COMPAT_DATA_PATH"
+helper() { printf '#!/bin/sh\n%s\n' "$1" > "$np_support/highball-env"; chmod +x "$np_support/highball-env"; }
+reset_hb() { WINEDLLPATH_PREPEND=/fallback/dxmt; np_hb_keys=""; np_hb_env_file=""; : > "$log"; }
+
+reset_hb
+# shellcheck disable=SC2016 # Single quotes keep the helper's text literal.
+helper 'echo "args: $*" >&2
+echo "# note: renderer d3dmetal"
+echo "GST_PLUGIN_PATH=/HB/gst"
+echo "WINEDLLPATH_PREPEND=/HB/d3dmetal/wine:/HB/dxmt/wine"
+echo "CX_D3DMETALPATH=/HB/d3dmetal/external"
+echo "DYLD_FALLBACK_FRAMEWORK_PATH=/HB/external:/HB/frameworks"
+echo "WINELOADER=/HB/wine"
+echo "lower=x"
+echo "\$(touch '"$hb"'/pwned)=x"
+echo "HB_VALUE=\$(touch '"$hb"'/pwned2)"'
+WINELOADER=/ours/wine
+highball_environment
+is "Highball's renderer folders replace the DXMT default" "/HB/d3dmetal/wine:/HB/dxmt/wine" "$WINEDLLPATH_PREPEND"
+is "Highball's variables are exported" "/HB/d3dmetal/external" "$CX_D3DMETALPATH"
+is "the loader stays Neutron's" "/ours/wine" "$WINELOADER"
+is "DYLD values wait for the launcher" "" "${DYLD_FALLBACK_FRAMEWORK_PATH:-}"
+is "the DYLD value is kept for the launcher" "1" "$(grep -c '^DYLD_FALLBACK_FRAMEWORK_PATH=/HB/external' "$np_hb_env_file")"
+is "a lowercase name is refused" "" "${lower:-}"
+is "nothing the helper prints is executed" "no" "$([ -e "$hb/pwned" ] || [ -e "$hb/pwned2" ] && echo yes || echo no)"
+# shellcheck disable=SC2016 # The literal text is the expected value.
+is "a value is exported as text" '$(touch '"$hb"'/pwned2)' "$HB_VALUE"
+is "the keys are remembered for the game" " GST_PLUGIN_PATH WINEDLLPATH_PREPEND CX_D3DMETALPATH HB_VALUE" "$np_hb_keys"
+is "notes are logged" "1" "$(grep -c 'highball-env: note: renderer d3dmetal' "$log")"
+is "the helper gets the prefix, engine, app id and database" \
+  "args: --prefix $WINEPREFIX --engine x64-crossover26.3-r19 --appid 1086940 --db $np_support/highball-db.json" \
+  "$(grep '^args:' "$log")"
+reset_hb
+hb_game="$hb/Game.exe"; : > "$hb_game"
+highball_environment "$hb_game"
+is "the game's executable is passed when it exists" "1" "$(grep -c -- "--exe $hb_game\$" "$log")"
+reset_hb
+highball_environment "$hb/missing.exe"
+is "a missing executable is not passed" "0" "$(grep -c -- '--exe' "$log")"
+# shellcheck disable=SC2016 # Match the literal script line.
+hb_call_site=$(grep -c 'highball_environment "\$1"' "$SRC")
+is "the run script hands the game's executable to the helper" "1" "$hb_call_site"
+unset -v GST_PLUGIN_PATH CX_D3DMETALPATH HB_VALUE
+
+reset_hb
+rm -f "$np_support/highball-env"
+highball_environment
+is "without the helper the DXMT default stays" "/fallback/dxmt" "$WINEDLLPATH_PREPEND"
+is "without the helper the launcher has no Highball file" "" "$np_hb_env_file"
+
+reset_hb
+helper 'echo "GST_PLUGIN_PATH=/HB/gst"; exit 1'
+highball_environment
+is "a failing helper leaves the DXMT default" "/fallback/dxmt" "$WINEDLLPATH_PREPEND"
+is "a failing helper exports nothing" "" "${GST_PLUGIN_PATH:-}"
+
+reset_hb
+helper 'echo "# error: engine x64-crossover26.3-r19 not found"'
+highball_environment
+is "a helper with only an error keeps the DXMT default" "/fallback/dxmt" "$WINEDLLPATH_PREPEND"
+is "the error is logged" "1" "$(grep -c 'highball-env: error: engine' "$log")"
+
+reset_hb
+helper 'echo "# note: renderer wined3d"; echo "CX_FWD_COMPAT_GL_CTX=1"'
+highball_environment
+is "WineD3D from Highball leaves no renderer folder" "" "${WINEDLLPATH_PREPEND:-}"
+
+reset_hb
+helper 'sleep 30; echo "GST_PLUGIN_PATH=/HB/gst"'
+# shellcheck disable=SC2329 # Called by highball_environment's wait loop.
+sleep() { :; }
+highball_environment
+unset -f sleep
+is "a helper that hangs is given up on" "/fallback/dxmt" "$WINEDLLPATH_PREPEND"
+is "the timeout is logged" "1" "$(grep -c 'no answer in 10 s' "$log")"
+
+echo "== Renderer report after the game exits =="
+hb_report_fn=$(sed -n '/^highball_renderer_report() {$/,/^} # highball_renderer_report$/p' "$SRC")
+[ -n "$hb_report_fn" ] || { echo "FAIL: highball_renderer_report not found"; exit 1; }
+eval "$hb_report_fn"
+hb_logdir="$WINEPREFIX/drive_c/highball/logs"
+mkdir -p "$hb_logdir"
+printf 'info:  old run\n' > "$hb_logdir/Old_d3d11.log"
+touch -t 202001010000 "$hb_logdir/Old_d3d11.log"
+np_hb_launch_mark="$STEAM_COMPAT_DATA_PATH/neutron-launch.mark"
+touch -t 202001010001 "$np_hb_launch_mark"
+printf 'warn:  D3D11CoreCreateDevice: Adapter is not a DXVK adapter\ninfo:  Game: Game.exe\ninfo:  DXVK-Kegworks: v1.10.4-async\n' > "$hb_logdir/Game_d3d11.log"
+: > "$hb_logdir/Game_dxgi.log"
+: > "$log"
+highball_renderer_report
+is "the DXVK log is reported by its version line" "1" "$(grep -c 'renderer report: Game_d3d11.log: info:  DXVK-Kegworks: v1.10.4-async' "$log")"
+is "an empty log is reported as empty" "1" "$(grep -c 'renderer report: Game_dxgi.log: empty' "$log")"
+is "logs from earlier launches are left out" "0" "$(grep -c 'Old_d3d11' "$log")"
+is "the launch marker is removed" "no" "$([ -e "$np_hb_launch_mark" ] && echo yes || echo no)"
+unset -v STEAM_COMPAT_DATA_PATH WINEPREFIX app_id log np_hb_env_file
+rm -rf "$hb"
+
+echo "== Wine's server directory permissions =="
+tighten=$(sed -n '/^tighten_wine_tmp() {$/,/^}$/p' "$SRC")
+[ -n "$tighten" ] || { echo "FAIL: tighten_wine_tmp not found"; exit 1; }
+eval "$tighten"
+wt=$(mktemp -d)
+log="$wt/run.log"
+mkdir -m 755 "$wt/.wine-test"
+tighten_wine_tmp "$wt/.wine-test"
+is "an open server directory is tightened to 700" "drwx------" "$(stat -f %Sp "$wt/.wine-test")"
+is "the fix is logged" "1" "$(grep -c 'tightened' "$log")"
+tighten_wine_tmp "$wt/.wine-missing"
+is "a missing directory is left for wineserver to create" "no" "$([ -e "$wt/.wine-missing" ] && echo yes || echo no)"
+rm -rf "$wt"
+
 echo "== Apple GPTK initialization and launcher environment =="
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-np_support="$work/Application Support/notproton"
+np_support="$work/Application Support/neutron"
 np_build="test"
-library="$np_support/runners/crossover-$np_build/CrossOver/lib64/apple_gptk/external/libd3dshared.dylib"
+np_runtime=crossover
+library="$np_support/runners/crossover-$np_build/root/lib64/apple_gptk/external/libd3dshared.dylib"
 init=$(sed -n '/^CX_ROOT=/,/^wine_unix=/p' "$SRC")
 # shellcheck disable=SC2016 # Match the literal launcher loop.
 forward=$(sed -n '/^for name in $(env /,/^done$/p' "$SRC")

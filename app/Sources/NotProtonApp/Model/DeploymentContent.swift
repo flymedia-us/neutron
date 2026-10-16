@@ -8,7 +8,7 @@ enum DeploymentContent {
         var dylibHashes: [String]? = nil
 
         func isNewer(than other: Build) -> Bool {
-            let order = version.compare(other.version, options: .numeric)
+            let order = VersionOrder.compare(version, other.version)
             return order == .orderedDescending || (order == .orderedSame && builtAt > other.builtAt)
         }
     }
@@ -119,14 +119,14 @@ enum DeploymentContent {
     static func inspect(files: [File], bundled: Build, installed: Build?, legacyVersion: String? = nil,
                         additionalDifferences: [String] = []) throws -> Status {
         if let installed, installed.isNewer(than: bundled) { return .newerInstalled }
-        if let legacyVersion, legacyVersion.compare(bundled.version, options: .numeric) == .orderedDescending {
+        if let legacyVersion, VersionOrder.compare(legacyVersion, bundled.version) == .orderedDescending {
             return .newerInstalled
         }
         let changed = try files.filter { try !$0.matches() }
         let differences = changed.map(\.name) + additionalDifferences
         guard !differences.isEmpty else { return .current }
         guard let installed else {
-            if let legacyVersion, legacyVersion.compare(bundled.version, options: .numeric) == .orderedAscending {
+            if let legacyVersion, VersionOrder.compare(legacyVersion, bundled.version) == .orderedAscending {
                 return .update(differences)
             }
             return .unrecorded(differences)
@@ -138,7 +138,7 @@ enum DeploymentContent {
             hashes != deployed
         {
             throw StepFailure(step: String(localized: "Check installed files"),
-                              detail: String(localized: "Steam's installed dylib does not match this account's build record. Finish or repair its installation with the NotProton app that last installed it."))
+                              detail: String(localized: "Steam's installed dylib does not match this account's build record. Finish or repair its installation with the Neutron app that last installed it."))
         }
         return bundled.isNewer(than: installed) ? .update(differences) : .repair(differences)
     }
@@ -146,14 +146,16 @@ enum DeploymentContent {
     static func files(
         payload: InstallPayload.Located, bridgePayload: BridgePayload.Located,
         app: URL, bridge: URL, signatures: URL, fonts: URL, overlayShim: URL, iconmaker: URL, appinfo: URL,
-        compatTools: URL, tools: [InstalledTool], runners: URL
+        highballEnv: URL, highballDB: URL, compatTools: URL, tools: [InstalledTool], runners: URL
     ) -> [File] {
         var files = [
             File(source: payload.dylib, destination: SupportPaths.Steam.deployedDylib(inBundle: app),
-                 name: "notproton.dylib", allowsResigning: true),
+                 name: SupportPaths.dylibName, allowsResigning: true),
             File(source: payload.overlayShim, destination: overlayShim, name: "overlay-shim.dylib"),
             File(source: payload.iconmaker, destination: iconmaker, name: "iconmaker", executable: true),
             File(source: payload.appinfo, destination: appinfo, name: "appinfo", executable: true),
+            File(source: payload.highballEnv, destination: highballEnv, name: "highball-env", executable: true),
+            File(source: payload.highballDB, destination: highballDB, name: "highball-db.json", needsClientStopped: false),
         ]
         files += payload.signatures.map {
             File(source: $0, destination: signatures.appending(path: $0.lastPathComponent),
@@ -178,7 +180,7 @@ enum DeploymentContent {
                 let path = "\(builtin.arch)/\(builtin.name)"
                 if let entry = bridgePayload.sources.first(where: { $0.bridgePaths.contains(path) }) {
                     files.append(File(source: entry.source, destination: root.appending(path: "lib/wine/\(path)"),
-                                      name: "crossover-\(build)/\(path)"))
+                                      name: "\(SupportPaths.runnerRoot(forBuild: build, runners: runners).lastPathComponent)/\(path)"))
                 }
             }
         }
@@ -195,7 +197,9 @@ enum DeploymentContent {
                               bridge: SupportPaths.bridge, signatures: SupportPaths.signatures,
                               fonts: SupportPaths.fonts,
                               overlayShim: SupportPaths.overlayShim, iconmaker: SupportPaths.iconmaker,
-                              appinfo: SupportPaths.appinfo, compatTools: SupportPaths.Steam.compatTools,
+                              appinfo: SupportPaths.appinfo, highballEnv: SupportPaths.highballEnv,
+                              highballDB: SupportPaths.highballDB,
+                              compatTools: SupportPaths.Steam.compatTools,
                               tools: CompatToolList.installed(), runners: SupportPaths.runners)
             return try inspect(files: files, bundled: Build(version: version, builtAt: payload.builtAt),
                                installed: readBuild(at: record(beside: SupportPaths.deployedVersion)),
@@ -219,7 +223,7 @@ enum DeploymentContent {
             for (arch, hash) in build.patchedNtdll {
                 let file = SupportPaths.clonedRoot(forBuild: build.id, runners: runners)
                     .appending(path: "lib/wine/\(arch.rawValue)/ntdll.dll")
-                files.append((file, hash, "crossover-\(build.id)/\(arch.rawValue)/ntdll.dll"))
+                files.append((file, hash, "\(build.runtime.rawValue)-\(build.id)/\(arch.rawValue)/ntdll.dll"))
                 files.append((NtdllPatcher.stagedCopy(of: arch, build: build.id, in: bridge), hash,
                               "bridge/wine/\(build.id)/\(arch.rawValue)/ntdll.dll"))
             }

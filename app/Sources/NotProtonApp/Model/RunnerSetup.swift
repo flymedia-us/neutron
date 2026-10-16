@@ -12,7 +12,7 @@ enum RunnerSetup {
 
         var label: String {
             switch self {
-            case .cloning: String(localized: "Copying CrossOver")
+            case .cloning: String(localized: "Copying the Wine runtime")
             case .staging: String(localized: "Patching")
             case .patching: String(localized: "Installing compatibility tool")
             case .finished: String(localized: "Done")
@@ -43,6 +43,16 @@ enum RunnerSetup {
 
     static let prepareStep = String(localized: "Set up compatibility tool")
 
+    static func run(
+        from engine: HighballEngine,
+        replacingExisting: Bool = false,
+        report: @Sendable (Phase) -> Void = { _ in }
+    ) throws -> Outcome {
+        report(.cloning)
+        let build = try RunnerInstaller.clone(from: engine, replacingExisting: replacingExisting)
+        return try prepare(build, report: report)
+    }
+
     static func prepare(
         _ build: RunnerBuild,
         runners: URL = SupportPaths.runners,
@@ -50,7 +60,8 @@ enum RunnerSetup {
         toolList: URL = SupportPaths.toolList,
         compatTools: URL = SupportPaths.Steam.compatTools,
         runScript: () throws -> URL = { try InstallPayload.locate().run },
-        license: (URL) -> CrossOverLicense.Status = { CrossOverLicense.check(crossOverRoot: $0) },
+        // nil asks the build's own runtime: CrossOver checks its licence, Highball has none
+        license: ((URL) -> CrossOverLicense.Status)? = nil,
         verify: (RunnerBuild, URL) throws -> Void = RunnerInstaller.verifyClone,
         stage: (RunnerBuild, URL, URL) throws -> [WineArch] = {
             try NtdllPatcher.stage(build: $0, runnerRoot: $1, bridge: $2)
@@ -67,7 +78,7 @@ enum RunnerSetup {
         }
 
         let root = SupportPaths.clonedRoot(forBuild: build.id, runners: runners)
-        let status = license(root)
+        let status = license?(root) ?? build.runtime.runtime.accessStatus(root: root)
         guard status.licensed else {
             throw StepFailure(step: String(localized: "Verify CrossOver license"), detail: status.detail)
         }
@@ -82,6 +93,12 @@ enum RunnerSetup {
         outcome.toolsChanged = try CompatToolList.sync(
             runners: runners, bridge: bridge, file: toolList, compatTools: compatTools
         )
+        // The options panel's renderer list; a failure here costs nothing but the filtering
+        if build.runtime == .highball {
+            do { try RendererList.sync(builds: RunnerStore.installedBuilds(in: runners)) } catch {
+                AppLog.note("renderer list not written: \(error)")
+            }
+        }
         for tool in CompatToolList.installed(runners: runners, file: toolList) {
             let run = compatTools.appending(path: "\(tool.name)/run")
             if FileManager.default.fileExists(atPath: run.path(percentEncoded: false)) { continue }

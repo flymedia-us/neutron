@@ -117,7 +117,7 @@ struct DeploymentContentTests {
         try FileManager.default.copyItem(at: library, to: installed)
         let identifier = largeSignature ? String(repeating: "x", count: 20_000) : "installed-copy"
         try Shell.check("/usr/bin/codesign", ["-f", "-s", "-", "--identifier", identifier, installed.path])
-        let file = DeploymentContent.File(source: library, destination: installed, name: "notproton.dylib", allowsResigning: true)
+        let file = DeploymentContent.File(source: library, destination: installed, name: "neutron.dylib", allowsResigning: true)
         #expect(Digest.sha256IfPresent(library) != Digest.sha256IfPresent(installed))
         #expect(try file.matches())
 
@@ -127,7 +127,7 @@ struct DeploymentContentTests {
         try bytes.write(to: installed)
         let recorded = DeploymentContent.Build(version: build.version, builtAt: build.builtAt,
                                                dylibHashes: try MachOBuild.hashesIgnoringSignature(of: library))
-        #expect(try DeploymentContent.inspect(files: [file], bundled: build, installed: recorded) == .repair(["notproton.dylib"]))
+        #expect(try DeploymentContent.inspect(files: [file], bundled: build, installed: recorded) == .repair(["neutron.dylib"]))
         try Shell.check("/usr/bin/codesign", ["-f", "-s", "-", installed.path])
         #expect(MachOBuild.identity(of: library) == MachOBuild.identity(of: installed))
         #expect(try !file.matches())
@@ -143,7 +143,7 @@ struct DeploymentContentTests {
     func unavailableInstallAction() {
         let status = SystemStatus()
         let payload = PayloadState(expected: 0, present: 0, missing: [], overlayShimPresent: true,
-                                   iconmakerPresent: true, appinfoPresent: true, signatureDatabase: "fixture",
+                                   iconmakerPresent: true, appinfoPresent: true, highballEnvPresent: true, highballDBPresent: true, signatureDatabase: "fixture",
                                    legacyCompatPresent: 0, legacyCompatExpected: 0, manifestProblem: nil)
         status.snapshot = StatusSnapshot(steam: .notInstalled, steamRunning: false, updateBlocked: false,
                                          crossOver: [], runner: .none, payload: payload,
@@ -151,7 +151,7 @@ struct DeploymentContentTests {
         #expect(!status.canInstall)
         status.snapshot?.installContent = .unavailable("invalid record")
         #expect(!status.canInstall)
-        status.snapshot?.installContent = .unrecorded(["notproton.dylib"])
+        status.snapshot?.installContent = .unrecorded(["neutron.dylib"])
         #expect(status.canInstall)
     }
 
@@ -160,7 +160,7 @@ struct DeploymentContentTests {
     func newerInstallBlocksRemoval() {
         let status = SystemStatus()
         let payload = PayloadState(expected: 0, present: 0, missing: [], overlayShimPresent: true,
-                                   iconmakerPresent: true, appinfoPresent: true, signatureDatabase: "fixture",
+                                   iconmakerPresent: true, appinfoPresent: true, highballEnvPresent: true, highballDBPresent: true, signatureDatabase: "fixture",
                                    legacyCompatPresent: 0, legacyCompatExpected: 0, manifestProblem: nil)
         status.snapshot = StatusSnapshot(steam: .notInstalled, steamRunning: false, updateBlocked: false,
                                          crossOver: [], runner: .none, payload: payload,
@@ -168,7 +168,7 @@ struct DeploymentContentTests {
         status.requestBuildRemoval("crossover-26.0")
         #expect(status.pendingRemoval == nil)
         #expect(status.pendingConfirmation == nil)
-        status.snapshot?.installContent = .unrecorded(["notproton.dylib"])
+        status.snapshot?.installContent = .unrecorded(["neutron.dylib"])
         status.requestBuildRemoval("crossover-26.0")
         #expect(status.pendingRemoval == "crossover-26.0")
         #expect(status.pendingConfirmation == .removeBuild)

@@ -1,0 +1,84 @@
+name: upstream sync
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+jobs:
+  merge:
+    name: Review upstream changes
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        source: [notproton]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
+      - name: Prepare labels
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+        run: |
+          for label in upstream-sync notproton highball highball-engine; do
+            gh label create "$label" --force --color 64748b --description "Upstream maintenance" -R "$GITHUB_REPOSITORY"
+          done
+      - name: Prepare an upstream pull request
+        id: sync
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+          SOURCE: ${{ matrix.source }}
+        run: sh "scripts/sync/$SOURCE.sh"
+      - name: Run checks on the proposed branch
+        if: steps.sync.outputs.branch != ''
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+          BRANCH: ${{ steps.sync.outputs.branch }}
+        run: |
+          gh workflow run lint.yml --ref "$BRANCH"
+          gh workflow run app.yml --ref "$BRANCH"
+  highball:
+    needs: merge
+    name: Highball library and game database
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
+      - name: Select Xcode
+        run: sh scripts/select-xcode.sh
+      - name: Prepare Highball updates
+        id: sync
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+        run: sh scripts/sync/highball.sh
+      - name: Run checks on the proposed branch
+        if: steps.sync.outputs.branch != ''
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+          BRANCH: ${{ steps.sync.outputs.branch }}
+        run: |
+          gh workflow run lint.yml --ref "$BRANCH"
+          gh workflow run app.yml --ref "$BRANCH"
+  engines:
+    needs: merge
+    name: Detect new engine builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report new builds for validation
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+        run: sh scripts/sync/highball-engine.sh

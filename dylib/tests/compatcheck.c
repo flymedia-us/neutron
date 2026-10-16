@@ -39,7 +39,7 @@ static void check(int ok, const char *what) {
 static void *first_fallback(void *arg) {
     int *ok = arg;
     const char *name = np_compat_fallback_tool_name();
-    *ok = atomic_load(&home_ready) && strcmp(name, "notproton") == 0;
+    *ok = atomic_load(&home_ready) && strcmp(name, "neutron") == 0;
     return NULL;
 }
 
@@ -235,42 +235,53 @@ static void tool_list_cases(void) {
         check(0, "the tool list fixture can be written");
         return;
     }
-    fputs("notproton\t27.0.0.40921-fex\tfex\tCrossOver Preview (FEX)\n"
-          "notproton-fex-41069\t27.0.0.41069-fex\tfex\tCrossOver Preview 41069 (FEX)\n"
-          "notproton-fex-rosetta\t27.0.0.40921-fex\trosetta\tCrossOver Preview (Rosetta)\n"
-          "notproton-26.3\t26.3.0.39832\trosetta\tCrossOver 26.3\n"
-          "notproton\t26.3.0.39832\trosetta\tDuplicate\n"
-          "proton-other\t1\trosetta\tForeign\n"
-          "notproton-x\t1\tarm\tBad flavor\n"
-          "notproton-q\t1\trosetta\tQuote\"d\n"
-          "notproton-short\t1\trosetta\n"
+    fputs("neutron\t27.0.0.40921-fex\tfex\tcrossover\tCrossOver Preview (FEX)\n"
+          "neutron-fex-41069\t27.0.0.41069-fex\tfex\tcrossover\tCrossOver Preview 41069 (FEX)\n"
+          "neutron-fex-rosetta\t27.0.0.40921-fex\trosetta\tcrossover\tCrossOver Preview (Rosetta)\n"
+          "neutron-26.3\t26.3.0.39832\trosetta\tCrossOver 26.3\n"
+          "neutron-highball-x64-crossover26.3-r19\tx64-crossover26.3-r19\trosetta\thighball\tHighball Wine 11 (r19)\n"
+          "neutron\t26.3.0.39832\trosetta\tcrossover\tDuplicate\n"
+          "proton-other\t1\trosetta\tcrossover\tForeign\n"
+          "neutron-x\t1\tarm\tcrossover\tBad flavor\n"
+          "neutron-q\t1\trosetta\tcrossover\tQuote\"d\n"
+          "neutron-short\t1\trosetta\n"
+          "neutron-rt\t1\trosetta\twinehq\tUnknown runtime\n"
+          "neutron-six\t1\trosetta\tcrossover\tSix\textra\n"
           "\n", f);
     fclose(f);
 
     int kept = np_compat_load_tool_list(path, "/tools");
     unlink(path);
 
-    check(kept == 4, "only well-formed, unique, notproton-named lines are kept");
-    check(strcmp(g_tools[0].name, "notproton") == 0
+    check(kept == 5, "only well-formed, unique, neutron-named lines are kept");
+    check(strcmp(g_tools[4].runtime, "highball") == 0
+          && strcmp(g_tools[4].build, "x64-crossover26.3-r19") == 0, "a highball tool keeps its runtime");
+    check(strcmp(g_tools[0].name, "neutron") == 0
           && strcmp(g_tools[0].flavor, "fex") == 0, "the first line stays first");
     check(strcmp(g_tools[3].build, "26.3.0.39832") == 0
-          && strcmp(g_tools[3].dir, "/tools/notproton-26.3") == 0,
+          && strcmp(g_tools[3].dir, "/tools/neutron-26.3") == 0,
           "each tool carries its build and directory");
+    check(strcmp(g_tools[0].runtime, "crossover") == 0
+          && strcmp(g_tools[0].display, "CrossOver Preview (FEX)") == 0,
+          "a five-column line carries its runtime and keeps the display");
+    check(strcmp(g_tools[3].runtime, "crossover") == 0
+          && strcmp(g_tools[3].display, "CrossOver 26.3") == 0,
+          "a four-column line from an older app is a CrossOver tool");
 
     uint8_t *mgr = build_manager(3, -1);
-    *(const char **)(entries + np_compat_tool_stride() + COMPAT_TOOL_NAME_OFF) = "notproton-26.3";
+    *(const char **)(entries + np_compat_tool_stride() + COMPAT_TOOL_NAME_OFF) = "neutron-26.3";
     check(np_compat_registered_tool(mgr) == entries + np_compat_tool_stride(),
           "the most preferred tool the manager holds is the default");
-    *(const char **)(entries + COMPAT_TOOL_NAME_OFF) = "notproton";
+    *(const char **)(entries + COMPAT_TOOL_NAME_OFF) = "neutron";
     check(np_compat_registered_tool(mgr) == entries,
           "the first listed tool wins when the manager holds it");
 
     const char *fex[3] = { NULL, NULL, NULL };
-    check(np_compat_fex_tools(fex, 3) == 2 && strcmp(fex[0], "notproton") == 0
-          && strcmp(fex[1], "notproton-fex-41069") == 0 && !fex[2],
+    check(np_compat_fex_tools(fex, 3) == 2 && strcmp(fex[0], "neutron") == 0
+          && strcmp(fex[1], "neutron-fex-41069") == 0 && !fex[2],
           "only the fex flavor counts as FEX, not a FEX build's Rosetta tool");
     fex[0] = fex[1] = NULL;
-    check(np_compat_fex_tools(fex, 1) == 1 && strcmp(fex[0], "notproton") == 0 && !fex[1],
+    check(np_compat_fex_tools(fex, 1) == 1 && strcmp(fex[0], "neutron") == 0 && !fex[1],
           "the FEX list stops at its limit, keeping the first listed");
 
     f = fopen(path, "w");
@@ -279,13 +290,13 @@ static void tool_list_cases(void) {
         return;
     }
     for (int i = 0; i < 40; i++)
-        fprintf(f, "notproton-%d\t1\trosetta\tTool %d\n", i, i);
+        fprintf(f, "neutron-%d\t1\trosetta\tcrossover\tTool %d\n", i, i);
     fclose(f);
     kept = np_compat_load_tool_list(path, "/tools");
     unlink(path);
-    check(kept == 40 && strcmp(g_tools[39].name, "notproton-39") == 0
-          && strcmp(g_tools[0].dir, "/tools/notproton-0") == 0, "a long list keeps every tool");
-    check(strcmp(np_compat_fallback_tool_name(), "notproton-0") == 0,
+    check(kept == 40 && strcmp(g_tools[39].name, "neutron-39") == 0
+          && strcmp(g_tools[0].dir, "/tools/neutron-0") == 0, "a long list keeps every tool");
+    check(strcmp(np_compat_fallback_tool_name(), "neutron-0") == 0,
           "the fallback is the first configured tool");
     check(np_compat_fex_tools(fex, 3) == 0, "a list with no FEX tool has no FEX names");
 
@@ -295,19 +306,19 @@ static void tool_list_cases(void) {
 
 static void tool_launch_cases(void) {
     static const char *tool[] = {
-        "'/tools/compatibilitytools.d/notproton/.'/run waitforexitandrun  '/g/game.exe'",
-        "A=1 '/tools/compatibilitytools.d/notproton-26.3/.'/run waitforexitandrun  '/g/game.exe' -x",
-        "'/tools/compatibilitytools.d/notproton-fex-rosetta/.'/run run ",
-        "'/tools/compatibilitytools.d/notproton'/run waitforexitandrun  '/g/game.exe'",
-        "'/Volumes/Ext/Steam/compatibilitytools.d/notproton/.'/run waitforexitandrun '/g/game.exe'",
+        "'/tools/compatibilitytools.d/neutron/.'/run waitforexitandrun  '/g/game.exe'",
+        "A=1 '/tools/compatibilitytools.d/neutron-26.3/.'/run waitforexitandrun  '/g/game.exe' -x",
+        "'/tools/compatibilitytools.d/neutron-fex-rosetta/.'/run run ",
+        "'/tools/compatibilitytools.d/neutron'/run waitforexitandrun  '/g/game.exe'",
+        "'/Volumes/Ext/Steam/compatibilitytools.d/neutron/.'/run waitforexitandrun '/g/game.exe'",
     };
     static const char *native[] = {
         "'/g/Game.app' -windowed",
         "'/g/Game.app/Contents/MacOS/Game'",
         "'/tools/compatibilitytools.d/proton-other/.'/run waitforexitandrun '/g/game.exe'",
-        "'/tools/compatibilitytools.d/notproton/Game' -x",
-        "'/tools/compatibilitytools.d/notproton/sub/.'/run waitforexitandrun '/g/game.exe'",
-        "'/tools/compatibilitytools.d/notproton'/other '/g/game.exe'",
+        "'/tools/compatibilitytools.d/neutron/Game' -x",
+        "'/tools/compatibilitytools.d/neutron/sub/.'/run waitforexitandrun '/g/game.exe'",
+        "'/tools/compatibilitytools.d/neutron'/other '/g/game.exe'",
         "",
     };
     for (size_t i = 0; i < sizeof(tool) / sizeof(tool[0]); i++)
@@ -337,20 +348,20 @@ static void stale_tool_cases(void) {
         return;
     }
     char current[700], legacy[700], user[700], lookalike[700];
-    snprintf(current, sizeof(current), "%s/notproton-26.3", root);
-    snprintf(legacy, sizeof(legacy), "%s/notproton", root);
-    snprintf(user, sizeof(user), "%s/notproton-mine", root);
-    snprintf(lookalike, sizeof(lookalike), "%s/notproton-copy", root);
+    snprintf(current, sizeof(current), "%s/neutron-26.3", root);
+    snprintf(legacy, sizeof(legacy), "%s/neutron", root);
+    snprintf(user, sizeof(user), "%s/neutron-mine", root);
+    snprintf(lookalike, sizeof(lookalike), "%s/neutron-copy", root);
     const char *dirs[] = { current, legacy, user, lookalike };
     for (size_t i = 0; i < 4; i++) mkdir(dirs[i], 0755);
 
     put(current, "flavor", "rosetta\n");
-    put(current, "run", "#!/bin/sh\n# notproton CrossOver compatibility tool shim\n");
-    put(legacy, "run", "#!/bin/sh\n# notproton CrossOver compatibility tool shim\nset -e\n");
+    put(current, "run", "#!/bin/sh\n# neutron CrossOver compatibility tool shim\n");
+    put(legacy, "run", "#!/bin/sh\n# neutron CrossOver compatibility tool shim\nset -e\n");
     put(legacy, "toolmanifest.vdf", "\"manifest\" {}\n");
     put(legacy, "compatibilitytool.vdf", "\"compatibilitytools\" {}\n");
     put(user, "run", "#!/bin/sh\nexec my-wine \"$@\"\n");
-    put(lookalike, "run", "#!/bin/sh\n# notproton CrossOver compatibility tool shim\n");
+    put(lookalike, "run", "#!/bin/sh\n# neutron CrossOver compatibility tool shim\n");
     put(lookalike, "notes.txt", "mine\n");
 
     g_tool_count = 0;
@@ -358,7 +369,7 @@ static void stale_tool_cases(void) {
 
     check(!exists(current), "an unlisted tool with a flavor file is removed");
     check(!exists(legacy), "the single-tool dylib's directory is removed");
-    check(exists(user), "a notproton directory the user wrote stays");
+    check(exists(user), "a neutron directory the user wrote stays");
     char notes[768];
     snprintf(notes, sizeof(notes), "%s/notes.txt", lookalike);
     check(exists(notes), "files this project did not write stay with their directory");
@@ -393,6 +404,127 @@ static void stub_set_mapping(void *mgr, uint32_t appid, const char *tool_name,
     last_priority = priority;
 }
 
+static void put_text(const char *path, const char *text) {
+    FILE *f = fopen(path, "w");
+    if (f) { fputs(text, f); fclose(f); }
+}
+
+static void default_tool_cases(void) {
+    // The list the app would have written: a CrossOver tool and the Highball tool
+    char home[] = "out/compatcheck-home.XXXXXX";
+    if (!mkdtemp(home)) {
+        check(0, "the home fixture directory can be made");
+        return;
+    }
+    char library[768], app_support[768], support[768], tools_dir[768], list[768];
+    snprintf(library, sizeof(library), "%s/Library", home);
+    snprintf(app_support, sizeof(app_support), "%s/Application Support", library);
+    snprintf(support, sizeof(support), "%s/neutron", app_support);
+    snprintf(tools_dir, sizeof(tools_dir), "%s/Steam/compatibilitytools.d", app_support);
+    snprintf(list, sizeof(list), "%s/tools", support);
+    check(ensure_dir(library) == 0 && ensure_dir(app_support) == 0 && ensure_dir(support) == 0,
+          "the support fixture can be made");
+    put_text(list, "neutron-26.3\t26.3.0.39832\trosetta\tcrossover\tCrossOver 26.3\n"
+                   "neutron-highball-x64-crossover26.3-r19\tx64-crossover26.3-r19\trosetta\thighball\tHighball Wine 11 (r19)\n");
+    check(np_compat_load_tool_list(list, tools_dir) == 2, "the fixture tool list loads both tools");
+
+    check(np_compat_default_tool_action(NULL, "neutron-26.3") == NP_DEFAULT_TOOL_KEEP,
+          "no request file leaves the default alone");
+    check(np_compat_default_tool_action("neutron-highball-x64-crossover26.3-r19", NULL) == NP_DEFAULT_TOOL_SET,
+          "a listed tool is set when Steam has no default");
+    check(np_compat_default_tool_action("neutron-highball-x64-crossover26.3-r19", "proton_9") == NP_DEFAULT_TOOL_SET,
+          "the switch on replaces another default");
+    check(np_compat_default_tool_action("neutron-26.3", "neutron-26.3") == NP_DEFAULT_TOOL_KEEP,
+          "a default that already matches is not set again");
+    check(np_compat_default_tool_action("neutron-unknown", NULL) == NP_DEFAULT_TOOL_KEEP,
+          "a tool that is not in the app's list is never set");
+    check(np_compat_default_tool_action("proton_9", NULL) == NP_DEFAULT_TOOL_KEEP,
+          "a name that is not one of ours is never set");
+    check(np_compat_default_tool_action("", "neutron-26.3") == NP_DEFAULT_TOOL_CLEAR,
+          "the switch off clears a default that is ours");
+    check(np_compat_default_tool_action("", "proton_9") == NP_DEFAULT_TOOL_KEEP,
+          "the switch off leaves someone else's default");
+    check(np_compat_default_tool_action("", NULL) == NP_DEFAULT_TOOL_KEEP,
+          "the switch off with no default does nothing");
+
+    // Then the file round trip, against the fake support folder
+    np_compat_set_app_mapping_fn((uintptr_t)stub_find_mapping);
+    np_compat_set_mapping_fn((uintptr_t)stub_set_mapping);
+    stub_mapping_entry[0] = "proton_9";
+    char request[768], status[768];
+    snprintf(request, sizeof(request), "%s/default-tool", support);
+    snprintf(status, sizeof(status), "%s/steam-default-tool", support);
+    put_text(request, "neutron-highball-x64-crossover26.3-r19\n");
+    last_appid = 7; last_priority = 7;
+    check(np_compat_apply_default_tool_in(manager, support) == 1, "a request that changes the default reports a change");
+    check(last_appid == 0 && last_priority == COMPAT_MAPPING_PRIORITY_GLOBAL,
+          "the request maps app 0 at global priority");
+    FILE *f = fopen(status, "r");
+    char line[128] = "";
+    if (f) { if (!fgets(line, sizeof(line), f)) line[0] = 0; fclose(f); }
+    check(strcmp(line, "proton_9\n") == 0, "Steam's default before the change is recorded for the app");
+    // Steam took the request; the next run finds it in place and leaves it
+    stub_mapping_entry[0] = "neutron-highball-x64-crossover26.3-r19";
+    last_appid = 7;
+    check(np_compat_apply_default_tool_in(manager, support) == 0, "a default that already matches is left alone");
+    check(last_appid == 7, "nothing is mapped when the default already matches");
+    put_text(request, "\n");
+    check(np_compat_apply_default_tool_in(manager, support) == 1, "the switch off clears our default");
+    check(last_appid == 0, "clearing maps app 0");
+    stub_mapping_entry[0] = NULL;
+    check(np_compat_apply_default_tool_in(manager, support) == 0, "the switch off with no default does nothing on disk either");
+
+    // No request yet: Highball becomes the default only when Steam has none
+    snprintf(request, sizeof(request), "%s/default-tool", support);
+    remove(request);
+    stub_mapping_entry[0] = "proton_9";
+    last_appid = 7;
+    check(np_compat_apply_default_tool_in(manager, support) == 0 && last_appid == 7,
+          "with no request, someone else's default is left alone");
+    check(access(request, F_OK) != 0, "and no request is written");
+    stub_mapping_entry[0] = NULL;
+    check(np_compat_apply_default_tool_in(manager, support) == 1 && last_appid == 0,
+          "with no request and no default, the Highball tool becomes the default");
+    f = fopen(request, "r");
+    line[0] = 0;
+    if (f) { if (!fgets(line, sizeof(line), f)) line[0] = 0; fclose(f); }
+    check(strcmp(line, "neutron-highball-x64-crossover26.3-r19\n") == 0,
+          "the adoption is recorded as the app's request, so the switch shows on");
+    remove(request);
+    put_text(list, "neutron-26.3\t26.3.0.39832\trosetta\tcrossover\tCrossOver 26.3\n");
+    check(np_compat_load_tool_list(list, tools_dir) == 1, "a list with only CrossOver loads");
+    last_appid = 7;
+    check(np_compat_apply_default_tool_in(manager, support) == 0 && last_appid == 7,
+          "without a Highball tool nothing is adopted");
+    check(np_compat_apply_default_tool(manager) == 0, "the home-based entry does nothing for a home with no support folder");
+}
+
+static void renderer_list_cases(void) {
+    char root[] = "out/compatcheck-renderers.XXXXXX";
+    if (!mkdtemp(root)) {
+        check(0, "the renderer list fixture directory can be made");
+        return;
+    }
+    char path[768];
+    snprintf(path, sizeof(path), "%s/renderers", root);
+    put_text(path, "neutron-highball-x64-crossover26.3-r19\tdxmt,wined3d\n"
+                   "neutron-highball-x64-other\tdxmt,d3dmetal,dxvk,wined3d\n"
+                   "not a tool\tdxmt\n"
+                   "neutron-broken\n");
+    const char *names[16];
+    char storage[1024];
+    size_t n = np_compat_tools_lacking_in(path, "d3dmetal", names, 16, storage, sizeof(storage));
+    check(n == 1 && strcmp(names[0], "neutron-highball-x64-crossover26.3-r19") == 0,
+          "the tool without D3DMetal is reported, the one with it and the malformed lines are not");
+    n = np_compat_tools_lacking_in(path, "dxvk", names, 16, storage, sizeof(storage));
+    check(n == 1, "the tool without DXVK is reported");
+    n = np_compat_tools_lacking_in(path, "dxmt", names, 16, storage, sizeof(storage));
+    check(n == 0, "a renderer every listed tool has reports nothing");
+    snprintf(path, sizeof(path), "%s/missing", root);
+    check(np_compat_tools_lacking_in(path, "d3dmetal", names, 16, storage, sizeof(storage)) == 0,
+          "no list reports nothing");
+}
+
 static void installed_fn_cases(void) {
     // Nothing installed is the state before the client has given the function up, and
     // every one of these reads as "cannot say" rather than as an answer.
@@ -417,9 +549,9 @@ static void installed_fn_cases(void) {
     check(np_compat_valid_platforms(NULL, 7) == 0, "no manager reports no platform");
 
     np_compat_set_app_mapping_fn((uintptr_t)stub_find_mapping);
-    stub_mapping_entry[0] = "notproton";
+    stub_mapping_entry[0] = "neutron";
     check(np_compat_app_mapping(manager, 7) != NULL, "a mapped app reports its entry");
-    check(strcmp(np_compat_app_mapping(manager, 7), "notproton") == 0,
+    check(strcmp(np_compat_app_mapping(manager, 7), "neutron") == 0,
           "the name in the entry is what comes back");
     check(np_compat_app_mapping(manager, 0) == NULL,
           "appid zero is refused rather than reaching the global entry");
@@ -432,18 +564,45 @@ static void installed_fn_cases(void) {
 
     np_compat_set_mapping_fn((uintptr_t)stub_set_mapping);
     last_priority = 0;
-    np_compat_map_tool(manager, 7, "notproton");
+    np_compat_map_tool(manager, 7, "neutron");
     check(last_appid == 7 && last_priority == COMPAT_MAPPING_PRIORITY_APP,
           "an app mapping outranks the global one");
 
     last_priority = 0;
-    np_compat_map_tool(manager, 0, "notproton");
+    np_compat_map_tool(manager, 0, "neutron");
     check(last_appid == 0 && last_priority == COMPAT_MAPPING_PRIORITY_GLOBAL,
           "the global mapping stays under the threshold that skips the platform check");
 
     last_priority = 0;
     np_compat_map_tool(manager, 7, NULL);
     check(last_priority == 0, "mapping an app to no tool at all reaches the client as nothing");
+}
+
+static void runtime_file_cases(void) {
+    char root[] = "out/compatcheck-runtime.XXXXXX";
+    if (!mkdtemp(root)) {
+        check(0, "the runtime fixture directory can be made");
+        return;
+    }
+    tool_entry_t tool = { 0 };
+    snprintf(tool.name, sizeof(tool.name), "%s", "neutron-26.3");
+    snprintf(tool.build, sizeof(tool.build), "%s", "26.3.0.39832");
+    snprintf(tool.flavor, sizeof(tool.flavor), "%s", "rosetta");
+    snprintf(tool.runtime, sizeof(tool.runtime), "%s", "crossover");
+    snprintf(tool.display, sizeof(tool.display), "%s", "CrossOver 26.3");
+    snprintf(tool.dir, sizeof(tool.dir), "%s/%s", root, tool.name);
+
+    write_tool(&tool);
+    char path[768];
+    snprintf(path, sizeof(path), "%s/runtime", tool.dir);
+    FILE *f = fopen(path, "r");
+    char line[32] = { 0 };
+    if (f) { fgets(line, sizeof(line), f); fclose(f); }
+    check(strcmp(line, "crossover\n") == 0, "each tool directory records its runtime");
+
+    remove_tool(root, tool.name);
+    check(!exists(tool.dir), "removing a tool removes its runtime file and the directory");
+    rmdir(root);
 }
 
 int main(void) {
@@ -455,6 +614,9 @@ int main(void) {
     tool_list_cases();
     tool_launch_cases();
     stale_tool_cases();
+    runtime_file_cases();
+    default_tool_cases();
+    renderer_list_cases();
     installed_fn_cases();
 
     if (failures) {

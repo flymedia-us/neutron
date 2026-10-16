@@ -16,7 +16,7 @@
 // The client maps Cloud's Windows path roots into the compat prefix only when
 // the tool's name contains "proton" so without a match every AutoCloud rule silently
 // skips the app.
-#define TOOL_DIR_NAME "notproton"
+#define TOOL_DIR_NAME "neutron"
 #define TOOL_RUN      "/run"
 
 #define COMPAT_MANAGER_ENABLED_OFF  0x7B0
@@ -297,6 +297,7 @@ typedef struct {
     char name[64];
     char build[64];
     char flavor[16];
+    char runtime[16];
     char display[96];
     char dir[640];
 } tool_entry_t;
@@ -331,27 +332,38 @@ static int is_display(const char *s) {
     return 1;
 }
 
+// Wine runtimes this build of the dylib knows how to run
+static int is_runtime(const char *s) {
+    return s && (strcmp(s, "crossover") == 0 || strcmp(s, "highball") == 0);
+}
+
+// name, build, flavor, [runtime,] display. Lines without a runtime come from an app
+// that predates it and are CrossOver tools.
 static int parse_tool_line(char *line, tool_entry_t *out) {
-    char *field[4];
+    char *field[5];
     int n = 0;
     char *save = NULL;
-    for (char *tok = strtok_r(line, "\t", &save); tok && n < 4;
-         tok = strtok_r(NULL, "\t", &save))
+    char *tok = strtok_r(line, "\t", &save);
+    for (; tok && n < 5; tok = strtok_r(NULL, "\t", &save))
         field[n++] = tok;
-    if (n != 4) return 0;
+    // A sixth field is left in tok when the loop stops at five
+    if (tok || (n != 4 && n != 5)) return 0;
+    const char *runtime = n == 5 ? field[3] : "crossover";
+    const char *display = field[n - 1];
 
     if (!is_tool_name(field[0]) || !is_token(field[1], ".-")
         || (strcmp(field[2], "fex") != 0 && strcmp(field[2], "rosetta") != 0)
-        || !is_display(field[3]))
+        || !is_runtime(runtime) || !is_display(display))
         return 0;
     if (strlen(field[0]) >= sizeof(out->name) || strlen(field[1]) >= sizeof(out->build)
-        || strlen(field[3]) >= sizeof(out->display))
+        || strlen(display) >= sizeof(out->display))
         return 0;
 
     snprintf(out->name, sizeof(out->name), "%s", field[0]);
     snprintf(out->build, sizeof(out->build), "%s", field[1]);
     snprintf(out->flavor, sizeof(out->flavor), "%s", field[2]);
-    snprintf(out->display, sizeof(out->display), "%s", field[3]);
+    snprintf(out->runtime, sizeof(out->runtime), "%s", runtime);
+    snprintf(out->display, sizeof(out->display), "%s", display);
     return 1;
 }
 
@@ -362,7 +374,7 @@ int np_compat_load_tool_list(const char *path, const char *tools_dir) {
     FILE *f = fopen(path, "r");
     if (!f) {
         NP_WARN("np_compat_load_tool_list: %s is missing, so no build has a tool "
-                "until NotProton sets one up", path);
+                "until Neutron sets one up", path);
         return 0;
     }
     g_tool_list_present = 1;
@@ -421,7 +433,7 @@ static void load_tool_list(void) {
     if (!home || tools_dir_path(tools_dir, sizeof(tools_dir)) != 0) return;
 
     char path[512];
-    snprintf(path, sizeof(path), "%s/Library/Application Support/notproton/tools", home);
+    snprintf(path, sizeof(path), "%s/Library/Application Support/neutron/tools", home);
     np_compat_load_tool_list(path, tools_dir);
 }
 
@@ -477,13 +489,18 @@ static int write_tool(const tool_entry_t *tool) {
     if (write_file(path, line, 0) == 0) wrote++;
     else NP_WARN("np_compat_ensure_tool_manifest: failed to write %s", path);
 
+    snprintf(line, sizeof(line), "%s\n", tool->runtime);
+    snprintf(path, sizeof(path), "%s/runtime", tool->dir);
+    if (write_file(path, line, 0) == 0) wrote++;
+    else NP_WARN("np_compat_ensure_tool_manifest: failed to write %s", path);
+
     if (wrote > 0)
         NP_LOG("np_compat_ensure_tool_manifest: wrote %d file(s) to %s", wrote, tool->dir);
 
     return 0;
 }
 
-#define RUN_SCRIPT_MARK "\n# notproton CrossOver compatibility tool shim\n"
+#define RUN_SCRIPT_MARK "\n# neutron CrossOver compatibility tool shim\n"
 
 static int written_here(const char *tool_dir) {
     char path[768];
@@ -508,7 +525,7 @@ static void remove_tool(const char *tools_dir, const char *name) {
     char path[768];
 
     static const char *const files[] = {
-        "compatibilitytool.vdf", "toolmanifest.vdf", "run", "flavor", "build",
+        "compatibilitytool.vdf", "toolmanifest.vdf", "run", "flavor", "build", "runtime",
     };
 
     for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
@@ -810,6 +827,151 @@ void np_compat_register_crossover(void *compat_mgr) {
         NP_LOG("np_compat_register_crossover: registered %s (build %s) into manager 0x%llx",
                t->name, t->build, (unsigned long long)(uintptr_t)compat_mgr);
     }
+}
+
+// The global default (app 0), what Steam's Compatibility settings call the default tool
+const char *np_compat_global_mapping(void *compat_mgr) {
+    if (!g_find_mapping || !compat_mgr)
+        return NULL;
+    return mapping_name(g_find_mapping(compat_mgr, 0));
+}
+
+static int is_listed_tool(const char *name) {
+    for (int i = 0; i < g_tool_count; i++)
+        if (strcmp(g_tools[i].name, name) == 0) return 1;
+    return 0;
+}
+
+// What the app asked for versus what Steam has. `request` is NULL without a request
+// file, "" to clear, else a tool name; `current` is NULL or "" when Steam has no default.
+np_default_tool_action_t np_compat_default_tool_action(const char *request, const char *current) {
+    if (!request)
+        return NP_DEFAULT_TOOL_KEEP;
+    if (!*request)
+        return current && is_tool_name(current) ? NP_DEFAULT_TOOL_CLEAR : NP_DEFAULT_TOOL_KEEP;
+    if (!is_tool_name(request) || !is_listed_tool(request))
+        return NP_DEFAULT_TOOL_KEEP;
+    return current && strcmp(current, request) == 0 ? NP_DEFAULT_TOOL_KEEP : NP_DEFAULT_TOOL_SET;
+}
+
+// One line, the tool name or nothing. Anything else reads as no request.
+static int read_default_tool_request(const char *path, char *name, size_t size) {
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    name[0] = 0;
+    char *got = fgets(name, (int)size, f);
+    // A line longer than a tool name can be is no request
+    int too_long = got && !strchr(name, '\n') && !feof(f);
+    fclose(f);
+    if (too_long) return 0;
+    name[strcspn(name, "\r\n")] = 0;
+    return 1;
+}
+
+// Records Steam's current default in <support>/steam-default-tool for the app, then applies
+// the request in <support>/default-tool. Returns 1 when the global mapping changed.
+int np_compat_apply_default_tool_in(void *compat_mgr, const char *support) {
+    if (!compat_mgr || !support) return 0;
+    const char *current = np_compat_global_mapping(compat_mgr);
+
+    char status_path[768];
+    snprintf(status_path, sizeof(status_path), "%s/steam-default-tool", support);
+    FILE *status = fopen(status_path, "w");
+    if (status) {
+        fprintf(status, "%s\n", current ? current : "");
+        fclose(status);
+    }
+
+    char request_path[768];
+    snprintf(request_path, sizeof(request_path), "%s/default-tool", support);
+    char request[64];
+    load_tool_list_once();
+    if (!read_default_tool_request(request_path, request, sizeof(request))) {
+        // No request yet: a Highball tool becomes the default only when Steam has none, once.
+        // The request file then records it, so the app's switch shows on and can undo it.
+        if (current && *current) return 0;
+        const char *highball = NULL;
+        for (int i = 0; i < g_tool_count && !highball; i++)
+            if (strcmp(g_tools[i].runtime, "highball") == 0) highball = g_tools[i].name;
+        if (!highball) return 0;
+        np_compat_map_tool(compat_mgr, 0, highball);
+        FILE *req = fopen(request_path, "w");
+        if (req) {
+            fprintf(req, "%s\n", highball);
+            fclose(req);
+        }
+        NP_LOG("np_compat_apply_default_tool: Steam had no default tool, %s is now the default", highball);
+        return 1;
+    }
+
+    switch (np_compat_default_tool_action(request, current)) {
+    case NP_DEFAULT_TOOL_SET:
+        np_compat_map_tool(compat_mgr, 0, request);
+        NP_LOG("np_compat_apply_default_tool: %s is now the default tool (was %s)",
+               request, current ? current : "none");
+        return 1;
+    case NP_DEFAULT_TOOL_CLEAR:
+        np_compat_map_tool(compat_mgr, 0, "");
+        NP_LOG("np_compat_apply_default_tool: cleared the default tool %s", current);
+        return 1;
+    case NP_DEFAULT_TOOL_KEEP:
+        break;
+    }
+    return 0;
+}
+
+// The app lists each Highball tool's renderers in <support>/renderers, one line per tool:
+// "<tool>\t<renderer>,<renderer>". A tool on the list without `renderer` lacks it; tools not
+// on the list (CrossOver's) are never reported. Names point into `storage`.
+size_t np_compat_tools_lacking_in(const char *path, const char *renderer, const char **names, size_t max,
+                                  char *storage, size_t storage_size) {
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    size_t n = 0, used = 0;
+    char line[512];
+    while (n < max && fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = 0;
+        char *tab = strchr(line, '\t');
+        if (!tab) continue;
+        *tab = 0;
+        if (!is_tool_name(line)) continue;
+        int has = 0;
+        for (char *item = tab + 1; item && *item;) {
+            char *comma = strchr(item, ',');
+            if (comma) *comma = 0;
+            if (strcmp(item, renderer) == 0) has = 1;
+            item = comma ? comma + 1 : NULL;
+        }
+        if (has) continue;
+        size_t len = strlen(line) + 1;
+        if (used + len > storage_size) break;
+        memcpy(storage + used, line, len);
+        names[n++] = storage + used;
+        used += len;
+    }
+    fclose(f);
+    return n;
+}
+
+size_t np_compat_tools_lacking(const char *renderer, const char **names, size_t max,
+                               char *storage, size_t storage_size) {
+    const char *home = np_home_dir();
+    if (!home) return 0;
+    char path[768];
+    snprintf(path, sizeof(path), "%s/Library/Application Support/neutron/renderers", home);
+    return np_compat_tools_lacking_in(path, renderer, names, max, storage, storage_size);
+}
+
+// Once per Steam run, the first time the compat manager is seen
+int np_compat_apply_default_tool(void *compat_mgr) {
+    static int applied = 0;
+    if (applied || !compat_mgr) return 0;
+    applied = 1;
+    const char *home = np_home_dir();
+    if (!home) return 0;
+    char support[768];
+    snprintf(support, sizeof(support), "%s/Library/Application Support/neutron", home);
+    return np_compat_apply_default_tool_in(compat_mgr, support);
 }
 
 const char *np_compat_fallback_tool_name(void) {

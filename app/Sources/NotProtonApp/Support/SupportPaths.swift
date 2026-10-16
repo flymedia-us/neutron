@@ -1,11 +1,11 @@
-// Path construction for the NotProton support directory and Steam
+// Path construction for the Neutron support directory and Steam
 
 import Foundation
 
 enum SupportPaths {
 
-    static let supportDirName = "notproton"
-    static let dylibName = "notproton.dylib"
+    static let supportDirName = "neutron"
+    static let dylibName = "neutron.dylib"
 
     static var home: URL {
         URL(filePath: NSHomeDirectory())
@@ -15,7 +15,7 @@ enum SupportPaths {
         home.appending(path: "Library/Application Support")
     }
 
-    // ~/Library/Application Support/notproton
+    // ~/Library/Application Support/neutron
     static var support: URL {
         applicationSupport.appending(path: supportDirName)
     }
@@ -33,6 +33,8 @@ enum SupportPaths {
     static var overlayShim: URL { support.appending(path: "overlay-shim.dylib") }
     static var iconmaker: URL { support.appending(path: "iconmaker") }
     static var appinfo: URL { support.appending(path: "appinfo") }
+    static var highballEnv: URL { support.appending(path: "highball-env") }
+    static var highballDB: URL { support.appending(path: "highball-db.json") }
 
     static var packageDownloads: URL {
         home.appending(path: "Library/Caches/\(supportDirName)/valve-packages")
@@ -47,8 +49,20 @@ enum SupportPaths {
     // Read by the dylib at Steam launch, in np_compat_load_tool_list.
     static var toolList: URL { support.appending(path: "tools") }
 
+    // Runner clones live in runners/<runtime>-<build>/root
+    static let clonedFolder = "root"
+
+    // A clone's directory names its runtime, so a build that left SupportedRunners is still found
+    static func runtime(forBuild build: String, runners: URL = SupportPaths.runners) -> RuntimeKind {
+        let fm = FileManager.default
+        if let kind = RuntimeKind.allCases.first(where: {
+            fm.fileExists(atPath: runners.appending(path: "\($0.rawValue)-\(build)").path(percentEncoded: false))
+        }) { return kind }
+        return SupportedRunners.build(id: build)?.runtime ?? .crossover
+    }
+
     static func runnerRoot(forBuild build: String, runners: URL = SupportPaths.runners) -> URL {
-        runners.appending(path: "crossover-\(build)")
+        runners.appending(path: "\(runtime(forBuild: build, runners: runners).rawValue)-\(build)")
     }
 
     static func crossOverRoot(inBundle bundle: URL) -> URL {
@@ -56,7 +70,7 @@ enum SupportPaths {
     }
 
     static func clonedRoot(forBuild build: String, runners: URL = SupportPaths.runners) -> URL {
-        runnerRoot(forBuild: build, runners: runners).appending(path: "CrossOver")
+        runnerRoot(forBuild: build, runners: runners).appending(path: clonedFolder)
     }
 
     static func prefixTemplates(forBuild build: String, in library: SteamLibrary) -> [URL] {
@@ -64,7 +78,7 @@ enum SupportPaths {
     }
 
     static func prefixTemplate(forBuild build: String, flavor: CompatTool.Flavor, in library: SteamLibrary) -> URL {
-        library.compatdata.appending(path: prefixTemplateFolder).appending(path: "crossover-\(build)-\(flavor.unixDir)")
+        library.compatdata.appending(path: prefixTemplateFolder).appending(path: "\(runtime(forBuild: build).rawValue)-\(build)-\(flavor.unixDir)")
     }
 
     static let prefixTemplateFolder = "notproton-template"
@@ -97,6 +111,7 @@ enum SupportPaths {
         }
 
         static var configFile: URL { userData.appending(path: "steam.cfg") }
+        static var compatConfig: URL { userData.appending(path: "config/config.vdf") }
 
         static var innerApp: URL { userData.appending(path: "Steam.AppBundle/Steam") }
         static var innerInfoPlist: URL { innerApp.appending(path: "Contents/Info.plist") }
@@ -112,7 +127,7 @@ enum SupportPaths {
             let entries = (try? FileManager.default.contentsOfDirectory(
                 at: directory, includingPropertiesForKeys: nil
             )) ?? []
-            return entries.filter { $0.lastPathComponent.hasPrefix("notproton") }
+            return entries.filter { $0.lastPathComponent.hasPrefix("neutron") }
         }
 
         static var libraryFoldersVDF: URL { userData.appending(path: "steamapps/libraryfolders.vdf") }

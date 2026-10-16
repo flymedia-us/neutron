@@ -1,0 +1,18 @@
+{
+  "primary": {
+    "repository": "NotProtonNot/NotProton",
+    "commit": "d5c6065",
+    "version": "1.1.9",
+    "sync": "scripts/sync/notproton.sh"
+  },
+  "highball_integration": {
+    "repository": "MagnusPladsen/Proton-ish",
+    "commit": "e15f171",
+    "scope": "Highball runtime discovery, setup/downloads, launch environment, per-game database, renderer controls and associated tests; no automatic full-project merges"
+  },
+  "runtime": {
+    "repository": "gauthierpiarrette/highball",
+    "version": "0.10.15",
+    "engine": "x64-crossover26.3-r19"
+  }
+}

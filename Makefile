@@ -9,7 +9,7 @@ CFLAGS   := -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) $(AVAIL) \
             -fPIC -MMD -MP \
             -Idylib -Ivendor -Ivendor/dobby/include
 LDFLAGS  := -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) \
-            -dynamiclib -install_name @rpath/notproton.dylib
+            -dynamiclib -install_name @rpath/neutron.dylib
 
 FRAMEWORKS := -framework CoreFoundation -framework CoreGraphics
 
@@ -56,9 +56,9 @@ GENERATED_DIR := $(OUT_DIR)/generated
 RUN_SCRIPT_H  := $(GENERATED_DIR)/compat_run.h
 CFLAGS += -I$(GENERATED_DIR)
 
-ARM64_DYLIB := $(OUT_DIR)/notproton.arm64.dylib
-X86_STUB    := $(OUT_DIR)/notproton.x86_64.dylib
-TARGET      := $(OUT_DIR)/notproton.dylib
+ARM64_DYLIB := $(OUT_DIR)/neutron.arm64.dylib
+X86_STUB    := $(OUT_DIR)/neutron.x86_64.dylib
+TARGET      := $(OUT_DIR)/neutron.dylib
 
 OBJS := $(patsubst %.c,$(OUT_DIR)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
@@ -71,6 +71,9 @@ DEPS := $(OBJS:.o=.d)
         compatsvc-check shortcutcheck scriptcheck envcheck buildcheck settingscheck routecheck bridgecheck gamedrivecheck launchercheck launch-shell activatecheck FORCE
 
 APP_PAYLOAD := app/Sources/NotProtonApp/Resources/payload
+# Highball engines Neutron can download; manifests come from the pinned Highball package
+HIGHBALL_ENGINES := x64-crossover26.3-r19
+HIGHBALL_PKG := app/.build/checkouts/highball
 
 all: $(TARGET) $(APP_PAYLOAD)
 
@@ -99,6 +102,10 @@ runcheck:
 seedcheck:
 	@if [ ! -f dylib/tests/seedcheck.sh ]; then $(call SKIP,seedcheck,dylib/tests/seedcheck.sh); exit 0; fi; \
 	sh dylib/tests/seedcheck.sh dylib/feats/compat_run.sh
+
+.PHONY: brandcheck
+brandcheck:
+	@sh dylib/tests/brandcheck.sh
 
 envcheck:
 	@if [ ! -f dylib/tests/envcheck.sh ]; then $(call SKIP,envcheck,dylib/tests/envcheck.sh); exit 0; fi; \
@@ -141,6 +148,9 @@ l10ncheck:
 # runcheck owns compat_run.sh, whose warnings wait for a change that can move
 # the embedded __text baseline
 SCRIPTS := $(shell git ls-files '*.sh' 2>/dev/null | grep -v '^dylib/feats/compat_run\.sh$$')
+
+synccheck:
+	@sh scripts/sync/test-sync.sh
 
 scriptcheck:
 	@if ! command -v shellcheck >/dev/null 2>&1; then \
@@ -329,7 +339,7 @@ spawn-live: $(TARGET)
 		drv=$${spec%%:*}; rest=$${spec#*:}; kid=$${rest%%:*}; rest=$${rest#*:}; \
 		want=$${rest%%:*}; arg=$${rest#*:}; [ "$$arg" = "$$rest" ] && arg=""; \
 		got=$$(DYLD_INSERT_LIBRARIES=$$PWD/$(TARGET) "$$tmp/$$drv" "$$tmp/$$kid" $$arg 2>/dev/null \
-		       | grep -c "/notproton.dylib$$") || true; \
+		       | grep -c "/neutron.dylib$$") || true; \
 		if [ "$$got" != "$$want" ]; then \
 			echo "$$drv $$arg -> $$kid: insert present $$got, wanted $$want"; fail=1; fi; \
 	done; \
@@ -358,6 +368,7 @@ panel-behavior:
 	node $(PANEL_TESTS)/migration.js $(OUT_DIR)/panel-emit && \
 	node $(PANEL_TESTS)/localization.js $(OUT_DIR)/panel-emit && \
 	node $(PANEL_TESTS)/fex.js $(OUT_DIR)/panel-emit && \
+	node $(PANEL_TESTS)/renderer-gaps.js $(OUT_DIR)/panel-emit && \
 	echo "==> panel behavior: renders as expected, no stale arguments"
 
 CX_ROOT ?= /Applications/CrossOver Preview.app
@@ -378,7 +389,7 @@ $(ARM64_DYLIB): $(OBJS)
 $(X86_STUB): dylib/stub_x86_64.c
 	@mkdir -p $(dir $@)
 	$(CC) -arch x86_64 -mmacosx-version-min=$(MIN_VER) $(AVAIL) \
-		-dynamiclib -install_name @rpath/notproton.dylib \
+		-dynamiclib -install_name @rpath/neutron.dylib \
 		-o $@ $<
 
 $(TARGET): $(ARM64_DYLIB) $(X86_STUB)
@@ -396,7 +407,7 @@ $(RUN_SCRIPT_H): dylib/feats/compat_run.sh dylib/embed_script.py
 
 $(OUT_DIR)/dylib/feats/compat.o: $(RUN_SCRIPT_H)
 
-SUPPORT_DIR        := $(HOME)/Library/Application Support/notproton
+SUPPORT_DIR        := $(HOME)/Library/Application Support/neutron
 OVERLAY_SHIM_SRC   := overlay-shim/overlay_shim.m
 OVERLAY_SHIM_ARM   := $(OUT_DIR)/overlay-shim.arm64.dylib
 OVERLAY_SHIM_X86   := $(OUT_DIR)/overlay-shim.x86_64.dylib
@@ -501,9 +512,9 @@ dobby:
 		-G "Unix Makefiles"
 	$(MAKE) -C $(DOBBY_DIR) -j$(shell sysctl -n hw.ncpu)
 
-STEAM_APP    ?= $$(p=$$(defaults read com.notproton.NotProton steamAppPath 2>/dev/null); printf '%s' "$${p:-/Applications/Steam.app}")
-DEPLOY_DST    = $(STEAM_APP)/Contents/MacOS/notproton.dylib
-INSTALL_DST  := $(SUPPORT_DIR)/notproton.dylib
+STEAM_APP    ?= $$(p=$$(defaults read us.flymedia.neutron steamAppPath 2>/dev/null); printf '%s' "$${p:-/Applications/Steam.app}")
+DEPLOY_DST    = $(STEAM_APP)/Contents/MacOS/neutron.dylib
+INSTALL_DST  := $(SUPPORT_DIR)/neutron.dylib
 
 dylib-install: $(TARGET)
 	$(call install_atomically,$(TARGET),$(INSTALL_DST))
@@ -514,7 +525,7 @@ sigdb-install:
 	cp -f signatures/macos.arm64/*.json "$(SUPPORT_DIR)/signatures/macos.arm64/"
 	@echo "==> Installed: $(SUPPORT_DIR)/signatures/macos.arm64"
 
-LAUNCHABLE_BUNDLES := $(HOME)/Desktop/NotProton.app /Applications/NotProton.app
+LAUNCHABLE_BUNDLES := $(HOME)/Desktop/Neutron.app /Applications/Neutron.app
 
 FONT_FILES := --include='*/' --include='*.ttf' --include='*.ttc' --exclude='*'
 
@@ -530,10 +541,10 @@ deploy: $(TARGET) dylib-install sigdb-install fonts-install helpers-install
 	$(call install_atomically,$(TARGET),$(DEPLOY_DST))
 	@echo "==> Deployed: $(DEPLOY_DST) (restart Steam to load)"
 	@for b in $(LAUNCHABLE_BUNDLES); do \
-		p=$$(find "$$b" -name notproton.dylib -type f 2>/dev/null | head -1); \
+		p=$$(find "$$b" -name neutron.dylib -type f 2>/dev/null | head -1); \
 		[ -n "$$p" ] || continue; \
 		cmp -s "$$p" "$(DEPLOY_DST)" && continue; \
-		echo "==> warning: $$b carries a different notproton.dylib"; \
+		echo "==> warning: $$b carries a different neutron.dylib"; \
 		echo "==> warning: launching it reverts this deploy, so rebuild it with 'make app'"; \
 	done
 
@@ -563,10 +574,20 @@ fonts:
 app-payload: $(TARGET) $(OVERLAY_SHIM) $(ICONMAKER) $(APPINFO)
 	@mkdir -p "$(APP_PAYLOAD)/signatures/macos.arm64"
 	@mkdir -p "$(APP_PAYLOAD)/bridge"
-	cp -f $(TARGET) "$(APP_PAYLOAD)/notproton.dylib"
+	cp -f $(TARGET) "$(APP_PAYLOAD)/neutron.dylib"
 	cp -f $(OVERLAY_SHIM) "$(APP_PAYLOAD)/overlay-shim.dylib"
 	cp -f $(ICONMAKER) "$(APP_PAYLOAD)/iconmaker"
 	cp -f $(APPINFO) "$(APP_PAYLOAD)/appinfo"
+	swift build --package-path app -c release --product highball-env
+	cp -f "$$(swift build --package-path app -c release --show-bin-path)/highball-env" "$(APP_PAYLOAD)/highball-env"
+	cp -f third_party/highball-db/highball-db.json "$(APP_PAYLOAD)/highball-db.json"
+	@rm -rf "$(APP_PAYLOAD)/highball-engines" && mkdir -p "$(APP_PAYLOAD)/highball-engines"
+	@for id in $(HIGHBALL_ENGINES); do \
+		src="$(HIGHBALL_PKG)/spike/engines/$$id.json"; \
+		[ -f "$$src" ] || { echo "$$src is missing from the pinned Highball package" >&2; exit 1; }; \
+		cp -f "$$src" "$(APP_PAYLOAD)/highball-engines/$$id.json"; \
+	done
+	cp -f "$(HIGHBALL_PKG)/spike/d3dmetal-license.txt" "$(APP_PAYLOAD)/highball-engines/d3dmetal-license.txt"
 	cp -f dylib/feats/compat_run.sh "$(APP_PAYLOAD)/run"
 	cp -f signatures/macos.arm64/*.json "$(APP_PAYLOAD)/signatures/macos.arm64/"
 	@set -e; for spec in $(BRIDGE_FILES); do \
@@ -583,15 +604,15 @@ app-payload: $(TARGET) $(OVERLAY_SHIM) $(ICONMAKER) $(APPINFO)
 	echo "$$stamp" > "$(APP_PAYLOAD)/build-time"
 	@echo "==> Staged app payload in $(APP_PAYLOAD)"
 
-APP_BUNDLE  := $(OUT_DIR)/NotProton.app
+APP_BUNDLE  := $(OUT_DIR)/Neutron.app
 APP_BUNDLE_PAYLOAD := $(APP_BUNDLE)/Contents/Resources/NotProtonApp_NotProtonApp.bundle/Contents/Resources/payload
-APP_ZIP     := $(OUT_DIR)/NotProton.zip
+APP_ZIP     := $(OUT_DIR)/Neutron.zip
 APP_VERSION := $(shell sed -n 's/^\#define NOTPROTON_VERSION "\(.*\)"/\1/p' dylib/version.h)
 
 APP_SIGN_ID ?= -
 
 ICONGEN  := $(OUT_DIR)/icongen
-ICON_DOC := $(OUT_DIR)/NotProton.icon
+ICON_DOC := $(OUT_DIR)/Neutron.icon
 ICON_DIR := $(OUT_DIR)/icon
 ICON_CAR := $(ICON_DIR)/Assets.car
 
@@ -607,7 +628,7 @@ $(ICON_CAR): $(ICONGEN)
 	$(ICONGEN) "$(ICON_DOC)"
 	@mkdir -p "$(ICON_DIR)"
 	xcrun actool "$(ICON_DOC)" --compile "$(ICON_DIR)" --platform macosx \
-		--minimum-deployment-target 15.0 --app-icon NotProton \
+		--minimum-deployment-target 15.0 --app-icon Neutron \
 		--output-partial-info-plist "$(ICON_DIR)/partial.plist" >/dev/null
 	@echo "==> Built $@"
 
@@ -622,11 +643,6 @@ app: app-payload $(ICON_CAR)
 		"$(APP_BUNDLE)/Contents/Info.plist"
 	cp "$$(swift build --package-path app -c release --show-bin-path)/NotProtonApp" \
 		"$(APP_BUNDLE)/Contents/MacOS/NotProtonApp"
-	@mkdir -p "$(APP_BUNDLE)/Contents/Frameworks"
-	ditto "$$(swift build --package-path app -c release --show-bin-path)/Sparkle.framework" \
-		"$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework"
-	install_name_tool -add_rpath @executable_path/../Frameworks \
-		"$(APP_BUNDLE)/Contents/MacOS/NotProtonApp"
 	xcrun vtool -set-build-version macos $(MIN_VER) "$$(xcrun --sdk macosx --show-sdk-version)" \
 		-replace -output "$(APP_BUNDLE)/Contents/MacOS/NotProtonApp" \
 		"$(APP_BUNDLE)/Contents/MacOS/NotProtonApp"
@@ -634,7 +650,7 @@ app: app-payload $(ICON_CAR)
 		"$(APP_BUNDLE)/Contents/Resources/"
 	cp -R "$(APP_BUNDLE)/Contents/Resources/NotProtonApp_NotProtonApp.bundle/Contents/Resources/"*.lproj \
 		"$(APP_BUNDLE)/Contents/Resources/"
-	cp "$(ICON_DIR)/Assets.car" "$(ICON_DIR)/NotProton.icns" \
+	cp "$(ICON_DIR)/Assets.car" "$(ICON_DIR)/Neutron.icns" \
 		"$(APP_BUNDLE)/Contents/Resources/"
 	@missing=$$(cd "$(APP_PAYLOAD)" && find . -type f ! -name '.DS_Store' | sed 's|^\./||' \
 		| while read -r rel; do \

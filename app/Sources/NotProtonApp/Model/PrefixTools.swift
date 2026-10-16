@@ -33,8 +33,8 @@ enum PrefixLog: CaseIterable, Sendable {
 
     func url(for prefix: WinePrefix, launchers: URL = SupportPaths.launchers) -> URL {
         switch self {
-        case .launch: prefix.root.appending(path: "notproton-run.log")
-        case .wine: launchers.appending(path: prefix.appID).appending(path: "notproton-wine.log")
+        case .launch: prefix.root.appending(path: "neutron-run.log")
+        case .wine: launchers.appending(path: prefix.appID).appending(path: "neutron-wine.log")
         }
     }
 }
@@ -125,9 +125,9 @@ enum PrefixTools {
     ) -> [String: String] {
         let root = runner.path(percentEncoded: false)
         var environment = ProcessInfo.processInfo.environment
-        environment["CX_ROOT"] = root
-        environment["CX_HOME"] = SupportPaths.applicationSupport
-            .appending(path: "CrossOver").path(percentEncoded: false)
+        for (key, value) in RuntimeKind.of(runner: runner).runtime.baseEnvironment(root: runner) {
+            environment[key] = value
+        }
         let wine = layout(runner: runner, flavor: flavor)
         environment["WINELOADER"] = wine.loader.path(percentEncoded: false)
         environment["WINESERVER"] = wine.server.path(percentEncoded: false)
@@ -150,26 +150,7 @@ enum PrefixTools {
     }
 
     static func layout(runner: URL, flavor: CompatTool.Flavor = .fex) -> WineLayout {
-        let fm = FileManager.default
-        let bin = runner.appending(path: "bin")
-        func executable(_ url: URL) -> Bool {
-            fm.isExecutableFile(atPath: url.path(percentEncoded: false))
-        }
-
-        let arm = runner.appending(path: "lib/wine/aarch64-unix")
-        let armLoader = arm.appending(path: "wine.app/Contents/MacOS/wine")
-        let armServer = bin.appending(path: "wineserver-arm64")
-        if flavor == .fex, executable(armLoader), executable(armServer) {
-            return WineLayout(loader: armLoader, server: armServer, unixDir: arm)
-        }
-
-        let unix = runner.appending(path: "lib/wine/x86_64-unix")
-        let server = bin.appending(path: "wineserver")
-        return WineLayout(
-            loader: unix.appending(path: "wine"),
-            server: executable(server) ? server : bin.appending(path: "wineserver-x86"),
-            unixDir: unix
-        )
+        RuntimeKind.of(runner: runner).runtime.layout(root: runner, flavor: flavor)
     }
 
     private static func readyLoader(
@@ -295,7 +276,7 @@ enum PrefixTools {
         // Under -q annihilate wipes the prefix and its saves without asking, prefix= switches to
         // another prefix, and options like --self-update change winetricks itself.
         if let refused = verbs.first(where: { $0 == "annihilate" || $0.hasPrefix("prefix=") || $0.hasPrefix("-") }) {
-            throw StepFailure(step: step, detail: String(localized: "NotProton does not run \(refused) with Winetricks."))
+            throw StepFailure(step: step, detail: String(localized: "Neutron does not run \(refused) with Winetricks."))
         }
         guard !PrefixStore.isInUse(prefix) else {
             throw StepFailure(step: step, detail: String(localized: "\(prefix.title) is running. Quit the game first."))

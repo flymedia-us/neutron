@@ -36,7 +36,7 @@ struct UninstallTests {
         var compatTools: [URL] {
             SupportPaths.Steam.notprotonTools(in: compatTool.deletingLastPathComponent())
         }
-        var secondTool: URL { compatTool.deletingLastPathComponent().appending(path: "notproton-26.3") }
+        var secondTool: URL { compatTool.deletingLastPathComponent().appending(path: "neutron-26.3") }
         var foreignTool: URL { compatTool.deletingLastPathComponent().appending(path: "GE-Proton9-1") }
 
         var outerPlist: URL { app.appending(path: "Contents/Info.plist") }
@@ -54,13 +54,13 @@ struct UninstallTests {
         let macOS = app.appending(path: "Contents/MacOS")
         let inner = root.appending(path: "inner")
         let legacyCompat = inner.appending(path: "legacycompat")
-        let compatTool = root.appending(path: "compatibilitytools.d/notproton")
-        let support = root.appending(path: "notproton")
+        let compatTool = root.appending(path: "compatibilitytools.d/neutron")
+        let support = root.appending(path: "neutron")
         let caches = root.appending(path: "valve-packages")
 
         let tools = compatTool.deletingLastPathComponent()
         for dir in [macOS, inner, legacyCompat, compatTool, support, caches,
-                    tools.appending(path: "notproton-26.3"), tools.appending(path: "GE-Proton9-1")] {
+                    tools.appending(path: "neutron-26.3"), tools.appending(path: "GE-Proton9-1")] {
             try files.createDirectory(at: dir, withIntermediateDirectories: true)
         }
 
@@ -204,6 +204,36 @@ struct UninstallTests {
 
         #expect(SteamBundle.currentInsert(at: layout.outerPlist) == nil)
         #expect(try verifies(layout.app))
+    }
+
+    @Test("Remove Everything takes our tool out of Steam's default-tool setting, and leaves another's")
+    func clearsOurDefaultTool() async throws {
+        for (tool, cleared) in [("neutron-highball-x64-crossover26.3-r19", true), ("proton_9", false)] {
+            let layout = try layout()
+            defer { try? FileManager.default.removeItem(at: layout.root) }
+            let config = layout.root.appending(path: "config.vdf")
+            let entry = "\t\t\t\t\t\"0\"\n\t\t\t\t\t{\n\t\t\t\t\t\t\"name\"\t\t\"\(tool)\"\n\t\t\t\t\t\t\"config\"\t\t\"\"\n\t\t\t\t\t}\n"
+            let text = "\"InstallConfigStore\"\n{\n\t\t\t\t\"CompatToolMapping\"\n\t\t\t\t{\n\(entry)\t\t\t\t}\n}\n"
+            try Data(text.utf8).write(to: config)
+            struct Offline: Error {}
+
+            _ = try await Uninstall.run(
+                app: layout.app,
+                innerPlist: layout.innerPlist,
+                updateBlocks: [layout.updateBlock],
+                legacyCompat: layout.legacyCompat,
+                compatTools: layout.compatTools,
+                compatConfig: config,
+                directories: [layout.support, layout.caches],
+                libraries: [],
+                modifications: layout.modifications, lockFolder: layout.root,
+                repair: { _, _ in throw Offline() },
+                stop: { _, _ in false }
+            )
+
+            let after = try String(contentsOf: config, encoding: .utf8)
+            #expect((SteamCompatConfig.defaultTool(in: after) == nil) == cleared, Comment(rawValue: tool))
+        }
     }
 
     @Test("A restore that fails does not cancel the removal")

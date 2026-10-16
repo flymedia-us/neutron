@@ -30,16 +30,16 @@ struct PrefixToolsTests {
     @Test("Log paths match where compat_run.sh writes them")
     func logPathsMatchRunScript() throws {
         let source = try Self.compatSource()
-        #expect(source.contains(#"log="$STEAM_COMPAT_DATA_PATH/notproton-run.log""#))
-        #expect(source.contains(#"loader_root="$HOME/Library/Application Support/notproton/launchers/$app_id""#))
-        #expect(source.contains(#"wine_log="$loader_root/notproton-wine.log""#))
+        #expect(source.contains(#"log="$STEAM_COMPAT_DATA_PATH/neutron-run.log""#))
+        #expect(source.contains(#"loader_root="$HOME/Library/Application Support/neutron/launchers/$app_id""#))
+        #expect(source.contains(#"wine_log="$loader_root/neutron-wine.log""#))
 
         let prefix = samplePrefix()
         let launchers = URL(filePath: "/tmp/launchers")
-        #expect(PrefixLog.launch.url(for: prefix, launchers: launchers) == prefix.root.appending(path: "notproton-run.log"))
+        #expect(PrefixLog.launch.url(for: prefix, launchers: launchers) == prefix.root.appending(path: "neutron-run.log"))
         #expect(PrefixLog.wine.url(for: prefix, launchers: launchers).path(percentEncoded: false)
-            == "/tmp/launchers/1574480/notproton-wine.log")
-        #expect(SupportPaths.launchers.path(percentEncoded: false).hasSuffix("Application Support/notproton/launchers"))
+            == "/tmp/launchers/1574480/neutron-wine.log")
+        #expect(SupportPaths.launchers.path(percentEncoded: false).hasSuffix("Application Support/neutron/launchers"))
     }
 
     @Test("The runner variables are the ones RUN_SCRIPT exports")
@@ -738,6 +738,27 @@ struct PrefixToolsTests {
         }
     }
 
+    // Highball's Wine names the Windows user after the Mac user, so a prefix it built keeps
+    // the profile under that name. A rebuild lands it on steamuser like crossover's.
+    @Test("A rebuild brings a Highball profile under the Mac user's name onto steamuser")
+    func rebuildAdoptsMacUserProfile() throws {
+        let (dir, runner, prefix) = try usedPrefixAndRunner()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let fm = FileManager.default
+        let users = prefix.pfx.appending(path: "drive_c/users")
+        let macUser = NSUserName()
+        let highball = users.appending(path: "\(macUser)/AppData/Local/Game")
+        try fm.createDirectory(at: highball, withIntermediateDirectories: true)
+        try Data("progress".utf8).write(to: highball.appending(path: "slot.sav"))
+
+        try PrefixTools.recreate(prefix, runner: runner)
+
+        #expect(try fm.destinationOfSymbolicLink(
+            atPath: users.appending(path: macUser).path(percentEncoded: false)) == "steamuser")
+        let landed = users.appending(path: "steamuser/AppData/Local/Game/slot.sav")
+        #expect(try String(contentsOf: landed, encoding: .utf8) == "progress")
+    }
+
     // Only folders were carried, so a game that keeps its settings in a file beside them
     // lost the file while its save folder came through.
     @Test("A rebuild keeps a file sitting loose in a profile")
@@ -1092,7 +1113,7 @@ struct PrefixToolsTests {
         let entry = library.compatdata.appending(path: "1574480")
         try FileManager.default.createDirectory(
             at: entry.appending(path: "pfx/drive_c"), withIntermediateDirectories: true)
-        try Data("log".utf8).write(to: entry.appending(path: "notproton-run.log"))
+        try Data("log".utf8).write(to: entry.appending(path: "neutron-run.log"))
 
         let prefix = try #require(PrefixStore.all(libraries: [library]).first)
         try PrefixTools.delete(prefix)
@@ -1123,9 +1144,10 @@ struct PrefixToolsTests {
     func profileLinkPointsInward() throws {
         let source = try Self.compatSource()
 
-        // CrossOver fixes the profile name, so crossover is the link and steamuser is
-        // the real directory holding the files Steam syncs.
-        #expect(source.contains(#"ln -s steamuser "$users/crossover""#))
+        // CrossOver fixes the profile name and Highball's Wine takes the Mac user's, so both
+        // are links and steamuser is the real directory holding the files Steam syncs.
+        #expect(source.contains(#"for alias in crossover $mac_user; do"#))
+        #expect(source.contains(#"ln -s steamuser "$users/$alias""#))
         // The reverse direction is what routed cloud saves out to the mac home.
         #expect(!source.contains(#"ln -s "$profile" "$users/steamuser""#))
     }
@@ -1504,13 +1526,13 @@ struct PrefixLastBuildTests {
             to: prefix.root.appending(path: PrefixTools.buildRecordName), atomically: true, encoding: .utf8)
 
         let fexOnly = [InstalledTool(
-            tool: CompatTool(name: "notproton", flavor: .fex, display: "CrossOver Preview (FEX)"),
+            tool: CompatTool(name: "neutron", flavor: .fex, display: "CrossOver Preview (FEX)"),
             build: Self.preview)]
         #expect(PrefixTools.tool(for: prefix, among: fexOnly, runners: runners) == nil)
 
         let fex = try #require(SupportedRunners.all.first { $0.id == Self.preview })
         let both = SupportedRunners.tools(for: [fex])
-        #expect(PrefixTools.tool(for: prefix, among: both, runners: runners)?.name == "notproton-fex-rosetta")
+        #expect(PrefixTools.tool(for: prefix, among: both, runners: runners)?.name == "neutron-fex-rosetta")
     }
 
     @Test("A prefix another CrossOver updated gets no tool, so nothing runs over it")

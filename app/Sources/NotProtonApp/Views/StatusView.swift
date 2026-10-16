@@ -160,9 +160,10 @@ struct StatusRow: View {
 
 struct StatusView: View {
     @Environment(SystemStatus.self) private var status
+    @State private var licenceSheet: HighballLicenceSheet.Mode?
 
     private static let updateBlockPrompt =
-        String(localized: "Steam client updates may break NotProton. If you don't want to wait for NotProton to be updated to be compatible with future Steam versions at the cost of not getting updates to the Steam client, you can stop the Steam client from updating itself.")
+        String(localized: "Steam client updates may break Neutron. If you don't want to wait for Neutron to be updated to be compatible with future Steam versions at the cost of not getting updates to the Steam client, you can stop the Steam client from updating itself.")
 
     var body: some View {
         Group {
@@ -180,6 +181,16 @@ struct StatusView: View {
                     .visibilityPriority(.high)
             } else {
                 ToolbarItem(placement: .primaryAction) { refreshButton }
+            }
+        }
+        .sheet(item: $licenceSheet) { mode in
+            HighballLicenceSheet(mode: mode, licence: Self.d3dmetalLicence) { choice in
+                switch mode {
+                case .download:
+                    Task { await status.setUpNeutron(acceptD3DMetal: choice == .accept) }
+                case .enable(let engine):
+                    if choice == .accept { Task { await status.enableD3DMetal(engine) } }
+                }
             }
         }
         .confirmationDialog(
@@ -205,7 +216,7 @@ struct StatusView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                String(localized: "This will restore Steam itself to its original state but does not remove the support components used by NotProton.")
+                String(localized: "This will restore Steam itself to its original state but does not remove the support components used by Neutron.")
             )
         }
         .confirmationDialog(
@@ -220,10 +231,10 @@ struct StatusView: View {
             }
             Button("Cancel", role: .cancel) { status.cancelBuildRemoval() }
         } message: {
-            Text("CrossOver itself is not removed.")
+            Text("Downloaded engine files remain available to other apps.")
         }
         .confirmationDialog(
-            String(localized: "Remove everything NotProton has created?"),
+            String(localized: "Remove everything Neutron has created?"),
             isPresented: asking(.removeEverything),
             titleVisibility: .visible
         ) {
@@ -234,31 +245,7 @@ struct StatusView: View {
         } message: {
             Text(Uninstall.confirmation())
         }
-        .confirmationDialog(
-            CrossOverLicense.notActivatedTitle,
-            isPresented: asking(.installUnlicensed),
-            titleVisibility: .visible
-        ) {
-            Button("Continue Anyway") {
-                Task { await status.installIntoSteam() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                CrossOverLicense.notActivatedAdvice
-                    + String(localized: " NotProton can be deployed, but the CrossOver compatibility tool cannot be installed without a valid license.")
-            )
-        }
         .task { if status.snapshot == nil { await status.refresh() } }
-        .confirmationDialog(
-            CrossOverLicense.notActivatedTitle,
-            isPresented: asking(.toolUnlicensed),
-            titleVisibility: .visible
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(CrossOverLicense.notActivatedAdvice)
-        }
     }
 
     private func asking(_ confirmation: SystemStatus.Confirmation) -> Binding<Bool> {
@@ -312,6 +299,18 @@ struct StatusView: View {
                 }
             }
 
+            Section("Set Up Neutron") {
+                StatusRow(
+                    title: String(localized: "Play Windows games on your Mac"),
+                    value: String(localized: "Install Steam integration and download the free Highball engine in one guided setup."),
+                    tone: .info,
+                    action: StatusAction(label: String(localized: "Set Up Neutron"), isProminent: true,
+                                         isEnabled: status.canInstall) {
+                        licenceSheet = .download(bytes: Self.engineDownloadBytes)
+                    }
+                )
+            }
+
             Section("Steam") {
                 StatusRow(
                     title: String(localized: "Location"),
@@ -342,27 +341,28 @@ struct StatusView: View {
             }
 
             Section {
-                crossOverSection(snapshot)
+                highballSection(snapshot)
             } header: {
-                Text("CrossOver")
-            } footer: {
-                HStack {
-                    Spacer()
-                    Button("Add CrossOver\u{2026}") { Task { await status.addCrossOver() } }
-                        .disabled(!status.isIdle)
-                        .help("Add a copy of CrossOver from another folder.")
-                }
+                Text("Highball")
             }
 
             componentsSection(snapshot.payload)
 
             dangerSection
+
+            Section("Thanks") {
+                Text("Neutron is a fork of NotProtonNot/NotProton and runs games with Highball's engine. Thank you both.")
+                HStack(spacing: 16) {
+                    Link("NotProtonNot/NotProton on GitHub", destination: ProjectLinks.notProton)
+                    Link("gauthierpiarrette/highball on GitHub", destination: ProjectLinks.highball)
+                }
+            }
         }
         .formStyle(.grouped)
     }
 
     private var dangerSection: some View {
-        Section {
+        Section("Repair and Remove") {
             StatusRow(
                 title: String(localized: "Repair Steam"),
                 value: String(localized: "Restore Steam to its original state."),
@@ -374,7 +374,7 @@ struct StatusView: View {
             )
             StatusRow(
                 title: String(localized: "Remove Everything"),
-                value: String(localized: "Remove NotProton and restore Steam to its original state."),
+                value: String(localized: "Remove Neutron and restore Steam to its original state."),
                 action: StatusAction(
                     label: String(localized: "Remove"),
                     role: .destructive,
@@ -395,7 +395,7 @@ struct StatusView: View {
         StatusAction(
             label: label,
             isProminent: prominent,
-            help: String(localized: "Install NotProton into Steam."),
+            help: String(localized: "Install Neutron into Steam."),
             isEnabled: status.canInstall
         ) {
             Task { await status.requestInstall() }
@@ -433,22 +433,22 @@ struct StatusView: View {
             }
             deploymentRow(.installed(version: version), payload: payload)
         case .newerInstalled:
-            StatusRow(title: "NotProton", value: String(localized: "A newer build is installed."), tone: .neutral,
-                      detail: String(localized: "Use the newer NotProton app to update or repair the installed files."))
+            StatusRow(title: "Neutron", value: String(localized: "A newer build is installed."), tone: .neutral,
+                      detail: String(localized: "Use the newer Neutron app to update or repair the installed files."))
         case .unavailable(let reason):
-            StatusRow(title: "NotProton", value: String(localized: "Could not check installed files."), tone: .warning, detail: reason)
+            StatusRow(title: "Neutron", value: String(localized: "Could not check installed files."), tone: .warning, detail: reason)
         case .update(let files):
-            StatusRow(title: "NotProton", value: String(localized: "Update available."), tone: .warning,
+            StatusRow(title: "Neutron", value: String(localized: "Update available."), tone: .warning,
                       detail: String(localized: "This app includes newer files than those installed for Steam."),
                       action: installAction(prominent: true, label: String(localized: "Update")))
                 .help(files.joined(separator: "\n"))
         case .repair(let files):
-            StatusRow(title: "NotProton", value: String(localized: "Installed files differ from this build."), tone: .warning,
+            StatusRow(title: "Neutron", value: String(localized: "Installed files differ from this build."), tone: .warning,
                       detail: String(localized: "Restore the files included with this app."),
                       action: installAction(prominent: true, label: String(localized: "Repair")))
                 .help(files.joined(separator: "\n"))
         case .unrecorded(let files):
-            StatusRow(title: "NotProton", value: String(localized: "Update available."), tone: .warning,
+            StatusRow(title: "Neutron", value: String(localized: "Update available."), tone: .warning,
                       detail: String(localized: "This app includes updated files for Steam."),
                       action: installAction(prominent: true, label: String(localized: "Update")))
                 .help(files.joined(separator: "\n"))
@@ -459,10 +459,10 @@ struct StatusView: View {
     private func deploymentRow(_ deployment: SteamDeployment, payload: PayloadState) -> some View {
         switch deployment {
         case .steamMissing:
-            StatusRow(title: "NotProton", value: String(localized: "Steam not found."), tone: .bad)
+            StatusRow(title: "Neutron", value: String(localized: "Steam not found."), tone: .bad)
         case .notInstalled:
             StatusRow(
-                title: "NotProton",
+                title: "Neutron",
                 value: String(localized: "Not installed."),
                 tone: .neutral,
                 action: installAction(prominent: true)
@@ -470,13 +470,13 @@ struct StatusView: View {
         case .installed(let version):
             if payload.isSteamComplete {
                 StatusRow(
-                    title: "NotProton",
+                    title: "Neutron",
                     value: String(localized: "Installed") + (version.map { " (\($0))" } ?? ""),
                     tone: .ok
                 )
             } else {
                 StatusRow(
-                    title: "NotProton",
+                    title: "Neutron",
                     value: String(localized: "Steam integration needs repair."),
                     tone: .warning,
                     detail: steamRepairDetail(payload),
@@ -485,17 +485,17 @@ struct StatusView: View {
             }
         case .outdated(_, let bundled):
             StatusRow(
-                title: "NotProton",
+                title: "Neutron",
                 value: String(localized: "Update available (\(bundled))."),
                 tone: .warning,
                 action: installAction(prominent: true)
             )
         case .foreign:
             StatusRow(
-                title: "NotProton",
+                title: "Neutron",
                 value: String(localized: "Another dylib is present."),
                 tone: .warning,
-                detail: String(localized: "Repair your Steam install before installing NotProton.")
+                detail: String(localized: "Repair your Steam install before installing Neutron.")
             )
         }
     }
@@ -505,11 +505,11 @@ struct StatusView: View {
             title: String(localized: "Block Steam client updates"),
             value: blocked
                 ? String(localized: "The Steam client will not update itself.")
-                : String(localized: "A Steam client update may break NotProton."),
+                : String(localized: "A Steam client update may break Neutron."),
             toggle: blockUpdates
         )
         .disabled(!status.isIdle)
-        .help("Steam client updates may break NotProton.")
+        .help("Steam client updates may break Neutron.")
     }
 
     private var blockUpdates: Binding<Bool> {
@@ -525,145 +525,108 @@ struct StatusView: View {
         )
     }
 
+    private static var d3dmetalLicence: String {
+        (try? InstallPayload.locate()).map(HighballInstaller.licenceText(in:)) ?? ""
+    }
+
+    private static var engineDownloadBytes: Int64 {
+        guard let payload = try? InstallPayload.locate(), let build = HighballInstaller.build else { return 0 }
+        return HighballInstaller.downloadBytes(manifest: HighballInstaller.manifest(in: payload, build: build))
+    }
+
     @ViewBuilder
-    private func crossOverSection(_ snapshot: StatusSnapshot) -> some View {
-        let rows = status.crossOverRows
-        if rows.isEmpty {
+    private func highballSection(_ snapshot: StatusSnapshot) -> some View {
+        if !snapshot.highball.contains(where: \.isUsable), let build = HighballInstaller.build {
             StatusRow(
-                title: "CrossOver",
-                value: String(localized: "Not found. Supported: \(SupportedRunners.versionList)."),
-                tone: .bad
-            )
-        }
-        let tools = SupportedRunners.tools(for: snapshot.installedRunners)
-        ForEach(rows) { row in
-            StatusRow(
-                title: row.title,
-                value: crossOverValue(row),
-                tone: crossOverTone(row),
-                detail: crossOverDetail(row, tools: tools),
-                trailing: row.copy == .ready ? buildSize(row.buildID) : nil,
-                action: crossOverAction(row, prominent: snapshot.runner == .none),
-                menu: crossOverMenu(row)
-            )
-            .background {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.accentColor.opacity(0.2))
-                    .padding(-6)
-                    .opacity(status.highlightedRow == row.id ? 1 : 0)
-            }
-            .animation(.easeInOut(duration: 0.3), value: status.highlightedRow == row.id)
-            .id(row.id)
-        }
-        if case .ready = snapshot.runner, !snapshot.payload.missing(origin: .patched).isEmpty {
-            StatusRow(
-                title: String(localized: "Compatibility Tool"),
-                value: String(localized: "Patched components are missing."),
-                tone: .warning,
+                title: String(localized: "Highball engine"),
+                value: String(localized: "Not installed. Neutron can download it; the Highball app is not needed."),
+                tone: .info,
+                detail: build.bundleVersion,
                 action: StatusAction(
-                    label: String(localized: "Repair"),
+                    label: String(localized: "Download\u{2026}"),
                     isProminent: true,
-                    help: String(localized: "Set up the compatibility tool again."),
-                    isEnabled: status.isIdle && status.setupSource != nil
-                ) { Task { await status.requestCompatibilityTool() } }
+                    isEnabled: status.canInstall
+                ) { licenceSheet = .download(bytes: Self.engineDownloadBytes) }
             )
         }
-    }
-
-    private func crossOverValue(_ row: CrossOverRow) -> String {
-        if let version = row.unsupportedVersion {
-            return String(localized: "Version \(version) not supported (supported: \(SupportedRunners.versionList))")
+        ForEach(snapshot.highball) { engine in
+            highballRow(engine, snapshot: snapshot)
         }
-        let build = String(localized: "Build \(SupportedRunners.displayVersion(forID: row.buildID))")
-        switch row.copy {
-        case .ready: return build
-        case .none: return build + (row.licensed == false ? String(localized: ", not set up or activated") : String(localized: ", not set up"))
-        case .unpatched: return build + String(localized: ", not patched")
-        case .damaged: return build + String(localized: ", copy damaged")
-        case .unsupported: return build + String(localized: ", not supported")
+        ForEach(SystemStatus.highballOrphans(snapshot.orphanedRunners), id: \.self) { build in
+            StatusRow(
+                title: build,
+                value: String(localized: "No longer supported"),
+                tone: .neutral,
+                trailing: buildSize(build),
+                action: removeCopyAction(build, label: String(localized: "Remove\u{2026}"))
+            )
         }
-    }
-
-    private func crossOverTone(_ row: CrossOverRow) -> StatusTone {
-        if row.unsupportedVersion != nil { return .neutral }
-        switch row.copy {
-        case .none: return row.licensed == false ? .warning : .neutral
-        case .ready: return .ok
-        case .unpatched, .damaged, .unsupported: return .warning
+        if let notice = SystemStatus.highballNotice(engines: snapshot.highball) {
+            StatusRow(title: String(localized: "Compatibility Tool"), value: notice, tone: .warning)
+        }
+        if snapshot.installedRunners.contains(where: { $0.runtime == .highball }) {
+            defaultToolRow(snapshot)
         }
     }
 
-    private func crossOverDetail(_ row: CrossOverRow, tools: [InstalledTool]) -> String? {
-        var lines: [String] = []
-        if row.copy == .ready || row.copy == .unpatched {
-            let names = tools.filter { $0.build == row.buildID }.map(\.display)
-            lines.append(contentsOf: names)
+    private func defaultToolRow(_ snapshot: StatusSnapshot) -> some View {
+        let requested = snapshot.defaultToolRequest.map { !$0.isEmpty } ?? false
+        let value: String = if requested {
+            String(localized: "Windows games without their own choice run through Highball. Applies when Steam starts.")
+        } else if let current = snapshot.steamDefaultTool, !current.isEmpty, !DefaultTool.isOurs(current) {
+            String(localized: "Steam's default is \(current). Turn on to use Highball instead.")
+        } else {
+            String(localized: "Each game needs Highball chosen under Properties → Compatibility.")
         }
-        if row.copy == .none, row.licensed == false { lines.append("\(String(localized: "Open CrossOver to activate it.")) \(CrossOverLicense.trialUnsupported)") }
-        if let install = row.install {
-            var path = install.bundle.path(percentEncoded: false)
-            if path.count > 1, path.hasSuffix("/") { path.removeLast() }
-            lines.append(path)
-        } else if row.copy != .unsupported {
-            lines.append(String(localized: "CrossOver app not found."))
-        }
-        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+        return StatusRow(
+            title: String(localized: "Use Highball for all Windows games"),
+            value: value,
+            toggle: Binding(
+                get: { requested },
+                set: { wanted in Task { await status.setDefaultTool(on: wanted) } }
+            )
+        )
+        .disabled(!status.isIdle)
     }
 
-    private func crossOverAction(_ row: CrossOverRow, prominent: Bool) -> StatusAction? {
-        let install = row.install
-        switch row.copy {
-        case .none where row.canSetUp:
-            return StatusAction(
-                label: String(localized: "Set Up"),
-                isProminent: prominent,
-                help: String(localized: "Copy \(row.title) and set up its compatibility tool."),
+    private func highballRow(_ engine: HighballEngine, snapshot: StatusSnapshot) -> StatusRow {
+        guard case .supported(let build) = engine.support else {
+            return StatusRow(title: engine.displayName, value: String(localized: "Not supported yet"),
+                             tone: .neutral)
+        }
+        let copy = SystemStatus.highballCopy(build.id, installed: snapshot.installedRunners, runner: snapshot.runner)
+        let value: String = switch copy {
+        case .notSetUp: String(localized: "Not set up")
+        case .ready: String(localized: "Ready")
+        case .needsRepair: String(localized: "Patched components are missing.")
+        }
+        let tone: StatusTone = switch copy {
+        case .notSetUp: .info
+        case .ready: .ok
+        case .needsRepair: .warning
+        }
+        let label: String = switch copy {
+        case .notSetUp: String(localized: "Set Up")
+        case .ready: String(localized: "Reinstall")
+        case .needsRepair: String(localized: "Repair")
+        }
+        return StatusRow(
+            title: engine.displayName,
+            value: value,
+            tone: tone,
+            trailing: copy == .notSetUp ? nil : buildSize(build.id),
+            action: StatusAction(
+                label: label,
+                isProminent: copy != .ready,
                 isEnabled: status.canInstall
-            ) { Task { await status.requestCompatibilityTool(from: install) } }
-        case .unpatched where row.canSetUp, .damaged where row.canSetUp:
-            return StatusAction(
-                label: String(localized: "Repair"),
-                isProminent: true,
-                help: String(localized: "Copy \(row.title) again."),
+            ) { Task { await status.setUpHighball(engine, replacingExisting: copy == .ready) } },
+            menu: (engine.d3dmetalAccepted ? [] : [StatusAction(
+                label: String(localized: "Enable D3DMetal\u{2026}"),
+                help: String(localized: "Accept Apple's licence so games can use D3DMetal."),
                 isEnabled: status.canInstall
-            ) { Task { await status.requestCompatibilityTool(from: install) } }
-        case .unsupported:
-            return removeCopyAction(row.buildID, label: String(localized: "Remove\u{2026}"))
-        default:
-            return nil
-        }
-    }
-
-    private func crossOverMenu(_ row: CrossOverRow) -> [StatusAction] {
-        var items: [StatusAction] = []
-        let install = row.install
-        if row.copy == .ready {
-            items.append(StatusAction(
-                label: String(localized: "Reinstall"),
-                help: String(localized: "Copy \(row.title) again."),
-                isEnabled: status.canInstall && row.canSetUp
-            ) { Task { await status.requestCompatibilityTool(from: install, replacingExisting: true) } })
-        }
-        let shown = install?.bundle
-            ?? (row.copy == .none ? nil : SupportPaths.runnerRoot(forBuild: row.buildID))
-        if let shown {
-            items.append(StatusAction(label: String(localized: "Show in Finder")) {
-                NSWorkspace.shared.activateFileViewerSelecting([shown])
-            })
-        }
-        if [.ready, .unpatched, .damaged].contains(row.copy) {
-            var remove = removeCopyAction(row.buildID, label: String(localized: "Remove Copy\u{2026}"))
-            remove.startsGroup = true
-            items.append(remove)
-        }
-        if let install, row.isManual {
-            items.append(StatusAction(
-                label: String(localized: "Remove from List"),
-                isEnabled: status.isIdle,
-                startsGroup: !items.contains(where: \.startsGroup)
-            ) { Task { await status.removeFromList(install) } })
-        }
-        return items
+            ) { licenceSheet = .enable(engine) }])
+                + (copy == .notSetUp ? [] : [removeCopyAction(build.id, label: String(localized: "Remove Copy\u{2026}"))])
+        )
     }
 
     private func buildSize(_ build: String) -> String? {
@@ -690,7 +653,7 @@ struct StatusView: View {
         StatusAction(
             label: label,
             role: .destructive,
-            help: String(localized: "Delete NotProton's copy of this build."),
+            help: String(localized: "Delete Neutron's copy of this build."),
             isEnabled: status.canInstall
         ) {
             status.requestBuildRemoval(build)
@@ -716,11 +679,11 @@ struct StatusView: View {
     @ViewBuilder
     private func componentsSection(_ payload: PayloadState) -> some View {
         if let problem = payload.manifestProblem {
-            Section("NotProton Components") {
+            Section("Neutron Components") {
                 StatusRow(title: String(localized: "Components"), value: String(localized: "Component list unreadable."), tone: .bad, detail: problem)
             }
         } else if payload.isComplete {
-            Section("NotProton Components") {
+            Section("Neutron Components") {
                 StatusRow(
                     title: String(localized: "Components"), value: String(localized: "Ready."), tone: .ok,
                     trailing: status.bridgeCopyBytes > 0
@@ -728,11 +691,11 @@ struct StatusView: View {
                 )
             }
         } else if payload.isEmpty {
-            Section("NotProton Components") {
+            Section("Neutron Components") {
                 StatusRow(title: String(localized: "Components"), value: String(localized: "Not yet deployed."), tone: .neutral)
             }
         } else {
-            Section("NotProton Components") {
+            Section("Neutron Components") {
                 if !payload.missing.isEmpty {
                     let names = payload.missing.map(\.path).joined(separator: ", ")
                     StatusRow(

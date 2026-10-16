@@ -1,5 +1,5 @@
 #!/bin/sh
-# notproton CrossOver compatibility tool shim
+# neutron CrossOver compatibility tool shim
 set -e
 
 verb="$1"
@@ -17,7 +17,7 @@ case "$verb" in
     ;;
 esac
 
-np_support="$HOME/Library/Application Support/notproton"
+np_support="$HOME/Library/Application Support/neutron"
 iconmaker="$np_support/iconmaker"
 
 find_client_root() {
@@ -151,10 +151,15 @@ if [ -n "$np_tool_dir" ] && [ -r "$np_tool_dir/build" ]; then
   read -r np_build < "$np_tool_dir/build" || np_build=""
 fi
 case "$np_build" in *[!A-Za-z0-9.-]*) np_build="" ;; esac
+np_runtime=crossover
+if [ -n "$np_tool_dir" ] && [ -r "$np_tool_dir/runtime" ]; then
+  read -r np_runtime < "$np_tool_dir/runtime" || np_runtime=crossover
+fi
+case "$np_runtime" in ''|*[!a-z]*) np_runtime=crossover ;; esac
 np_display=$(sed -n 's/.*"display_name"[[:space:]]*"\(.*\)".*/\1/p' \
   "$np_tool_dir/compatibilitytool.vdf" 2>/dev/null | head -1) || np_display=""
 [ -n "$np_display" ] || np_display="CrossOver build ${np_build:-unknown}"
-CX_ROOT="$np_support/runners/crossover-$np_build/CrossOver"
+CX_ROOT="$np_support/runners/$np_runtime-$np_build/root"
 export CX_ROOT
 # CrossOver initializes Rosetta's Windows thread-state support even without D3DMetal.
 if [ -f "$CX_ROOT/lib64/apple_gptk/external/libd3dshared.dylib" ]; then
@@ -170,6 +175,28 @@ if [ "$np_flavor" = rosetta ] || [ ! -x "$WINELOADER" ] || [ ! -x "$WINESERVER" 
   WINESERVER="$CX_ROOT/bin/wineserver"
   [ -x "$WINESERVER" ] || WINESERVER="$CX_ROOT/bin/wineserver-x86"
 fi
+# Highball: server in bin, engine environment from runtime.env, DXMT, Proton's user name
+if [ "$np_runtime" = highball ]; then
+  wine_unix="$CX_ROOT/lib/wine/x86_64-unix"
+  WINELOADER="$wine_unix/wine"
+  WINESERVER="$CX_ROOT/bin/wineserver"
+  # Letters are spelled out: bracket ranges follow the locale and would let lowercase through
+  np_hb_keys=""
+  if [ -r "$CX_ROOT/runtime.env" ]; then
+    while IFS= read -r np_env_line || [ -n "$np_env_line" ]; do
+      case "$np_env_line" in *=*) ;; *) continue ;; esac
+      np_env_key=${np_env_line%%=*}
+      case "$np_env_key" in
+        ''|[0123456789]*|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) continue ;;
+      esac
+      # A launch option the user set wins over the engine's default
+      printenv "$np_env_key" > /dev/null 2>&1 || export "$np_env_key=${np_env_line#*=}"
+      np_hb_keys="$np_hb_keys $np_env_key"
+    done < "$CX_ROOT/runtime.env"
+  fi
+  [ ! -d "$CX_ROOT/renderers/dxmt/wine" ] || export WINEDLLPATH_PREPEND="$CX_ROOT/renderers/dxmt/wine"
+  export CX_FWD_COMPAT_GL_CTX=1 WINEUSERNAME=steamuser
+fi # highball
 export WINELOADER WINESERVER
 
 np_dropped=""
@@ -194,7 +221,7 @@ export WINEDLLPATH="$CX_ROOT/lib/wine/x86_64-windows:$wine_unix${WINEDLLPATH:+:$
 export PATH="$CX_ROOT/bin:$PATH"
 
 if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
-  log="$STEAM_COMPAT_DATA_PATH/notproton-run.log"
+  log="$STEAM_COMPAT_DATA_PATH/neutron-run.log"
 else
   log=/dev/null
 fi
@@ -287,8 +314,8 @@ refuse_foreign_prefix() {
   esac
   have=$(prefix_machine) || return 0
   [ "$have" = "$want" ] && return 0
-  echo "=== prefix ntdll is $have and this compatibility tool wants $want, rebuild the prefix in NotProton ===" >> "$log" 2>&1 || true
-  show_alert "This game needs its prefix rebuilt" "This game originally ran under $(tool_name "$have"), but $(tool_name "$want") is present now. The prefix needs to be rebuilt in NotProton in order to run the game. You will not lose game saves by rebuilding the prefix."
+  echo "=== prefix ntdll is $have and this compatibility tool wants $want, rebuild the prefix in Neutron ===" >> "$log" 2>&1 || true
+  show_alert "This game needs its prefix rebuilt" "This game originally ran under $(tool_name "$have"), but $(tool_name "$want") is present now. The prefix needs to be rebuilt in Neutron in order to run the game. You will not lose game saves by rebuilding the prefix."
   exit 1
 }
 
@@ -302,16 +329,17 @@ last_wine_build() {
   [ "$updated" = "$(stat -f %m "$CX_ROOT/share/wine/wine.inf" 2>/dev/null)" ] && return 0
   had_build=other
   had_display="another version of CrossOver"
-  for inf in "$np_support"/runners/crossover-*/CrossOver/share/wine/wine.inf; do
+  for inf in "$np_support"/runners/*-*/root/share/wine/wine.inf; do
     [ "$(stat -f %m "$inf" 2>/dev/null)" = "$updated" ] || continue
     if [ "$had_build" != other ]; then
       had_build=other
       had_display="another version of CrossOver"
       break
     fi
-    had_build=${inf#"$np_support/runners/crossover-"}
+    had_build=${inf#"$np_support/runners/"}
     had_build=${had_build%%/*}
-    had_display=$(awk -F '\t' -v b="$had_build" '$2 == b { print $4; exit }' \
+    had_build=${had_build#*-}
+    had_display=$(awk -F '\t' -v b="$had_build" '$2 == b { print $NF; exit }' \
       "$np_support/tools" 2>/dev/null) || had_display=""
   done
 }
@@ -329,9 +357,9 @@ refuse_other_build() {
     last_wine_build
   fi
   if [ -n "$had_build" ] && [ "$had_build" != "$np_build" ]; then
-    echo "=== prefix was last run by build $had_build and this compatibility tool runs $np_build, rebuild the prefix in NotProton ===" >> "$log" 2>&1 || true
+    echo "=== prefix was last run by build $had_build and this compatibility tool runs $np_build, rebuild the prefix in Neutron ===" >> "$log" 2>&1 || true
     had_display=$(alert_safe "${had_display:-CrossOver build $had_build}")
-    show_alert "This game needs its prefix rebuilt" "This game's prefix was last run by $had_display, and this compatibility tool runs $(alert_safe "$np_display"). Rebuild the prefix in NotProton to run it here, or pick $had_display again in the game's Compatibility settings. You will not lose game saves by rebuilding the prefix."
+    show_alert "This game needs its prefix rebuilt" "This game's prefix was last run by $had_display, and this compatibility tool runs $(alert_safe "$np_display"). Rebuild the prefix in Neutron to run it here, or pick $had_display again in the game's Compatibility settings. You will not lose game saves by rebuilding the prefix."
     exit 1
   fi
 }
@@ -476,6 +504,71 @@ migrate_user_paths() {
   [ "$migration_failed" -eq 0 ]
 }
 
+# Highball's Wine names the Windows user after the Mac user; WINEUSERNAME changes nothing
+# there. That name gets the same link to steamuser that CrossOver's fixed "crossover" gets.
+mac_user_name() {
+  name=$(id -un 2>/dev/null) || return 1
+  case "$name" in
+    ''|steamuser|crossover|Public|.*|*[!A-Za-z0-9._-]*) return 1 ;;
+  esac
+  printf '%s\n' "$name"
+}
+
+# A profile Wine already built under the Mac user's name moves into steamuser: a file only
+# there moves over, an identical one is dropped, and of two that differ the newer wins. What
+# loses stays behind in "<name> BACKUP". Wine's links to the Mac folders are dropped, never
+# followed.
+adopt_mac_user_profile() {
+  old=$1
+  landing_root=$2
+  old_rel=${old##*/}
+  echo "=== moving Wine's $old_rel profile into steamuser ===" >> "$log" 2>&1 || true
+  find "$old" -type l -exec rm -f {} + 2>/dev/null || true
+  find "$old" -type f 2>/dev/null | while IFS= read -r file; do
+    rel=${file#"$old"/}
+    landing="$landing_root/$rel"
+    if [ -L "$landing" ]; then
+      echo "=== $rel is a link in steamuser, left in $old_rel BACKUP ===" >> "$log" 2>&1 || true
+      continue
+    fi
+    if [ ! -e "$landing" ]; then
+      mkdir -p "${landing%/*}" 2>/dev/null && mv "$file" "$landing" 2>/dev/null \
+        || echo "=== $rel could not move into steamuser ===" >> "$log" 2>&1 || true
+      continue
+    fi
+    if [ ! -f "$landing" ]; then
+      echo "=== $rel is a folder in steamuser, left in $old_rel BACKUP ===" >> "$log" 2>&1 || true
+      continue
+    fi
+    if cmp -s "$file" "$landing"; then
+      rm -f "$file" 2>/dev/null || true
+      continue
+    fi
+    if [ -n "$(find "$file" -prune -newer "$landing" 2>/dev/null)" ]; then
+      if mv "$landing" "$file.steamuser" 2>/dev/null && mv "$file" "$landing" 2>/dev/null \
+        && mv "$file.steamuser" "$file" 2>/dev/null; then
+        echo "=== $rel: newer file from $old_rel kept, the steamuser one is in $old_rel BACKUP ===" \
+          >> "$log" 2>&1 || true
+      else
+        echo "=== $rel could not move into steamuser ===" >> "$log" 2>&1 || true
+      fi
+    else
+      echo "=== $rel: newer steamuser file kept, the $old_rel one is in $old_rel BACKUP ===" \
+        >> "$log" 2>&1 || true
+    fi
+  done
+  find "$old" -depth -type d -exec rmdir {} \; 2>/dev/null || true
+  [ -e "$old" ] || return 0
+  backup="$old BACKUP"
+  backup_number=2
+  while [ -e "$backup" ] || [ -L "$backup" ]; do
+    backup="$old BACKUP $backup_number"
+    backup_number=$((backup_number + 1))
+  done
+  mv "$old" "$backup" 2>/dev/null || return 1
+  echo "=== files that did not move are in ${backup##*/} ===" >> "$log" 2>&1 || true
+}
+
 lay_out_proton_profile() {
   users="${1:-$WINEPREFIX}/drive_c/users"
   if [ -d "$users/crossover" ] && [ ! -L "$users/crossover" ]; then
@@ -494,14 +587,20 @@ lay_out_proton_profile() {
       AppData/Local AppData/Roaming; do
     mkdir -p "$profile/$folder" 2>/dev/null || true
   done
+  mac_user=$(mac_user_name) || mac_user=""
+  if [ -n "$mac_user" ] && [ -d "$users/$mac_user" ] && [ ! -L "$users/$mac_user" ]; then
+    adopt_mac_user_profile "$users/$mac_user" "$profile" || return 1
+  fi
   migrate_user_paths "$profile" || return 1
-  if [ -L "$users/crossover" ] && [ ! -e "$users/crossover" ]; then
-    rm -f "$users/crossover" 2>/dev/null || true
-  fi
-  if [ ! -e "$users/crossover" ] \
-    && ln -s steamuser "$users/crossover" 2>/dev/null; then
-    echo "=== pointed crossover at steamuser ===" >> "$log" 2>&1 || true
-  fi
+  for alias in crossover $mac_user; do
+    if [ -L "$users/$alias" ] && [ ! -e "$users/$alias" ]; then
+      rm -f "$users/$alias" 2>/dev/null || true
+    fi
+    if [ ! -e "$users/$alias" ] \
+      && ln -s steamuser "$users/$alias" 2>/dev/null; then
+      echo "=== pointed $alias at steamuser ===" >> "$log" 2>&1 || true
+    fi
+  done
 }
 
 controller_ids() {
@@ -624,20 +723,38 @@ import_prefix_settings() {
 
 stage_step="runner check"
 if [ -z "$np_build" ] || [ ! -d "$CX_ROOT/lib/wine" ]; then
-  echo "=== build ${np_build:-(none recorded)} behind this compatibility tool is not set up, set it up in NotProton ===" >> "$log" 2>&1 || true
-  show_alert "CrossOver is not set up" "The CrossOver build behind $(alert_safe "$np_display") is not set up. Set it up in NotProton, or pick another compatibility tool for this game."
+  echo "=== build ${np_build:-(none recorded)} behind this compatibility tool is not set up, set it up in Neutron ===" >> "$log" 2>&1 || true
+  show_alert "CrossOver is not set up" "The CrossOver build behind $(alert_safe "$np_display") is not set up. Set it up in Neutron, or pick another compatibility tool for this game."
   exit 1
 fi
 echo "runner: build $np_build ($np_display) at $CX_ROOT" >> "$log" 2>&1 || true
 
+# wineserver refuses to start when its directory is open to other users, which happens when
+# another tool created it with the default umask
+tighten_wine_tmp() {
+  [ -d "$1" ] && [ ! -L "$1" ] || return 0
+  [ "$(stat -f %u "$1" 2>/dev/null)" = "$(id -u)" ] || return 0
+  [ "$(stat -f %Lp "$1" 2>/dev/null)" != 700 ] || return 0
+  chmod 700 "$1" 2>/dev/null || return 0
+  echo "=== tightened $1 to 700 so wineserver will start ===" >> "$log" 2>&1 || true
+}
+tighten_wine_tmp "/tmp/.wine-$(id -u)"
+
 # Each CrossOver build needs its own template.
 # FEX builds need two, one for FEX/arm64 Wine and one for Rosetta/AMD64 Wine
 runner_id=""
-[ -z "$np_build" ] || runner_id="crossover-$np_build-${wine_unix##*/}"
+[ -z "$np_build" ] || runner_id="$np_runtime-$np_build-${wine_unix##*/}"
 
 in_template_env() {
   prefix="$1"
   shift
+  # Highball's libraries live outside Wine's normal search path, including during wineboot.
+  if [ "$np_runtime" = highball ]; then
+    set -- DYLD_FALLBACK_FRAMEWORK_PATH="${DYLD_FALLBACK_FRAMEWORK_PATH:-}" \
+      DYLD_FALLBACK_LIBRARY_PATH="${DYLD_FALLBACK_LIBRARY_PATH:-}" \
+      GST_PLUGIN_PATH="${GST_PLUGIN_PATH:-}" WINEDEBUG="${WINEDEBUG:-fixme-all}" \
+      CX_FWD_COMPAT_GL_CTX=1 WINEUSERNAME=steamuser "$@"
+  fi
   without_lock_fds \
     env -i HOME="$HOME" USER="${USER:-}" LOGNAME="${LOGNAME:-}" TMPDIR="${TMPDIR:-/tmp}" \
     LANG="${LANG:-}" LC_ALL="${LC_ALL:-}" \
@@ -732,6 +849,25 @@ build_prefix_template() {
   [ -f "$template_dir/pfx/system.reg" ]
 }
 
+is_appledouble() {
+  case "${1##*/}" in ._*) ;; *) return 1 ;; esac
+  [ -f "$1" ] && [ ! -L "$1" ] || return 1
+  sidecar_name=${1##*/}
+  sidecar_peer="${1%/*}/${sidecar_name#._}"
+  { [ -e "$sidecar_peer" ] || [ -L "$sidecar_peer" ]; } || return 1
+  [ "$(od -An -tx1 -N4 "$1" 2>/dev/null | tr -d ' \n')" = 00051607 ]
+}
+
+install_seed_file() {
+  [ ! -e "$2" ] && [ ! -L "$2" ] || return 1
+  if ln -h "$1" "$2" 2>/dev/null; then
+    [ ! -L "$2" ] && [ "$1" -ef "$2" ]
+  else
+    # exFAT supports neither hard links nor APFS clones. Keep the staged source intact.
+    cp -pn "$1" "$2" && [ ! -L "$2" ] && cmp -s "$1" "$2"
+  fi
+}
+
 install_seed_tree() (
   set -- ""
   while [ "$#" -gt 0 ]; do
@@ -743,6 +879,8 @@ install_seed_tree() (
     [ -r "$source_dir" ] && [ -x "$source_dir" ] || return 1
     for source in "$source_dir"/* "$source_dir"/.[!.]* "$source_dir"/..?*; do
       [ -e "$source" ] || [ -L "$source" ] || continue
+      # macOS exposes resource-fork sidecars as files on exFAT.
+      is_appledouble "$source" && continue
       name=${source##*/}
       if [ -z "$relative" ]; then
         case "$name" in system.reg|.update-timestamp) continue ;; esac
@@ -764,18 +902,15 @@ install_seed_tree() (
         ln -sh "$(readlink "$source")" "$target" || return 1
         [ -L "$target" ] && [ "$(readlink "$source")" = "$(readlink "$target")" ] || return 1
       elif [ -f "$source" ]; then
-        ln -h "$source" "$target" || return 1
-        [ ! -L "$target" ] && [ "$source" -ef "$target" ] || return 1
+        install_seed_file "$source" "$target" || return 1
       else
         return 1
       fi
     done
   done
-  ln -h "$seed_scratch/system.reg" "$WINEPREFIX/system.reg" \
-    && [ ! -L "$WINEPREFIX/system.reg" ] \
-    && [ "$seed_scratch/system.reg" -ef "$WINEPREFIX/system.reg" ] || return 1
+  install_seed_file "$seed_scratch/system.reg" "$WINEPREFIX/system.reg" || return 1
   if [ -f "$seed_scratch/.update-timestamp" ]; then
-    ln -h "$seed_scratch/.update-timestamp" "$WINEPREFIX/.update-timestamp" || return 1
+    install_seed_file "$seed_scratch/.update-timestamp" "$WINEPREFIX/.update-timestamp" || return 1
   fi
 )
 
@@ -813,13 +948,16 @@ prefix_is_bare() (
       && [ -r "$directory" ] && [ -x "$directory" ] || return 1
     for node in "$directory"/* "$directory"/.[!.]* "$directory"/..?*; do
       [ -e "$node" ] || [ -L "$node" ] || continue
+      is_appledouble "$node" && continue
       part="$relative/${node##*/}"
       if [ -L "$node" ]; then
         if [ "$part" = /dosdevices/s: ] && [ "$(readlink "$node")" = "$(game_drive_record)" ]; then
           continue
         fi
+        mac_alias="/drive_c/users/$(mac_user_name 2>/dev/null || true):steamuser"
         case "$part:$(readlink "$node")" in
           /dosdevices/c::../drive_c|/dosdevices/z::/|/drive_c/users/crossover:steamuser|\
+          "$mac_alias"|\
           '/drive_c/users/steamuser/My Documents:./Documents'|\
           '/drive_c/users/steamuser/Application Data:./AppData/Roaming'|\
           '/drive_c/users/steamuser/Local Settings/Application Data:../AppData/Local') continue ;;
@@ -926,7 +1064,7 @@ prepare_prefix_directory() {
   for interrupted in "$STEAM_COMPAT_DATA_PATH"/pfx.replaced.*; do
     [ -e "$interrupted" ] || [ -L "$interrupted" ] || continue
     echo "=== interrupted prefix replacement needs recovery: $interrupted ===" >> "$log" 2>&1 || true
-    show_alert "Prefix recovery required" "An interrupted prefix replacement may hold saved games. Do not delete this prefix. Check its notproton-run.log for the recovery folder."
+    show_alert "Prefix recovery required" "An interrupted prefix replacement may hold saved games. Do not delete this prefix. Check its neutron-run.log for the recovery folder."
     exit 1
   done
   mkdir -p "$WINEPREFIX"
@@ -1033,6 +1171,91 @@ link_fonts() {
   done
 }
 
+# Highball: the launch environment Highball itself would use, from highball-env (HighballKit).
+# On any failure the engine defaults from runtime.env and DXMT stay in place.
+np_hb_env_file=""
+np_hb_launch_mark=""
+highball_environment() {
+  hb_exe="${1:-}"
+  hb_helper="$np_support/highball-env"
+  hb_file="$STEAM_COMPAT_DATA_PATH/neutron-highball.env"
+  hb_raw="$hb_file.raw"
+  rm -f "$hb_file" "$hb_raw"
+  if [ ! -x "$hb_helper" ]; then
+    echo "highball-env: missing, using the engine defaults" >> "$log" 2>&1 || true
+    return 0
+  fi
+  # The game's executable lets Highball spot a DirectX 12-only program
+  set -- --prefix "$WINEPREFIX" --engine "$np_build" --appid "${app_id:-0}" --db "$np_support/highball-db.json"
+  [ -z "$hb_exe" ] || [ ! -f "$hb_exe" ] || set -- "$@" --exe "$hb_exe"
+  "$hb_helper" "$@" > "$hb_raw" 2>> "$log" &
+  hb_pid=$!
+  hb_wait=0
+  while kill -0 "$hb_pid" 2>/dev/null && [ "$hb_wait" -lt 100 ]; do
+    sleep 0.1
+    hb_wait=$((hb_wait + 1))
+  done
+  if kill -0 "$hb_pid" 2>/dev/null; then
+    kill "$hb_pid" 2>/dev/null || true
+    wait "$hb_pid" 2>/dev/null || true
+    echo "highball-env: no answer in 10 s, using the engine defaults" >> "$log" 2>&1 || true
+    rm -f "$hb_raw"
+    return 0
+  fi
+  if ! wait "$hb_pid"; then
+    echo "highball-env: failed, using the engine defaults" >> "$log" 2>&1 || true
+    rm -f "$hb_raw"
+    return 0
+  fi
+  hb_count=0
+  while IFS= read -r hb_line || [ -n "$hb_line" ]; do
+    case "$hb_line" in
+      '#'*) echo "highball-env: ${hb_line#'# '}" >> "$log" 2>&1 || true; continue ;;
+      *=*) ;;
+      *) continue ;;
+    esac
+    hb_key=${hb_line%%=*}
+    # Letters are spelled out: bracket ranges follow the locale and would let lowercase through
+    case "$hb_key" in
+      ''|[0123456789]*|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) continue ;;
+      WINEPREFIX|WINELOADER|WINESERVER|WINEDLLPATH|PATH|WINEUSERNAME|CX_ROOT|WINEDEBUG|WINEMSYNC) continue ;;
+    esac
+    printf '%s\n' "$hb_line" >> "$hb_file"
+    hb_count=$((hb_count + 1))
+  done < "$hb_raw"
+  rm -f "$hb_raw"
+  if [ "$hb_count" -eq 0 ]; then
+    echo "highball-env: no environment, using the engine defaults" >> "$log" 2>&1 || true
+    rm -f "$hb_file"
+    return 0
+  fi
+  # Highball decides the renderer folders now, WineD3D included, which has none
+  unset -v WINEDLLPATH_PREPEND
+  while IFS= read -r hb_line; do
+    hb_key=${hb_line%%=*}
+    # dyld drops DYLD_* on the way to the game; the launcher reads them from the file
+    case "$hb_key" in DYLD_*) continue ;; esac
+    export "$hb_key=${hb_line#*=}"
+    np_hb_keys="$np_hb_keys $hb_key"
+  done < "$hb_file"
+  np_hb_env_file="$hb_file"
+  echo "highball-env: $hb_count variables from Highball" >> "$log" 2>&1 || true
+} # highball_environment
+
+# Highball: which Direct3D the game got, from the logs the renderers write into C:\highball\logs
+highball_renderer_report() {
+  hb_logs="$WINEPREFIX/drive_c/highball/logs"
+  [ -n "$np_hb_launch_mark" ] && [ -d "$hb_logs" ] || return 0
+  find "$hb_logs" -name '*.log' -newer "$np_hb_launch_mark" 2>/dev/null | LC_ALL=C sort |
+    while IFS= read -r hb_log; do
+      hb_what=$(grep -m 1 -E '(DXVK|DXMT|vkd3d)[A-Za-z-]*: v' "$hb_log" 2>/dev/null | cut -c1-120) || hb_what=""
+      if [ -z "$hb_what" ]; then
+        if [ -s "$hb_log" ]; then hb_what="no version line"; else hb_what="empty"; fi
+      fi
+      echo "renderer report: ${hb_log##*/}: $hb_what" >> "$log" 2>&1 || true
+    done
+  rm -f "$np_hb_launch_mark"
+} # highball_renderer_report
 # Wine loads its own VC++ runtime over Microsoft's, which breaks some games
 native_vc_runtime() {
   for name in concrt140 msvcp140 msvcp140_1 msvcp140_2 msvcp140_atomic_wait msvcp140_codecvt_ids \
@@ -1070,7 +1293,7 @@ if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
   seed_prefix_from_template
   stage_step="profile layout"
   if ! lay_out_proton_profile; then
-    show_alert "Saved-game folders need attention" "NotProton left the conflicting files in place. Open this prefix's notproton-run.log for details before trying again."
+    show_alert "Saved-game folders need attention" "Neutron left the conflicting files in place. Open this prefix's neutron-run.log for details before trying again."
     exit 1
   fi
   echo "video: RetinaMode=${NOTPROTON_RETINA:-0}" >> "$log" 2>&1 || true
@@ -1083,13 +1306,17 @@ if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
   # A prefix that Wine built just now only has dosdevices from this point on.
   stage_step="game drive"
   map_game_drive
+  if [ "$np_runtime" = highball ]; then
+    stage_step="highball environment"
+    highball_environment "$1"
+  fi
 fi
 
 bridge_src="$np_support/bridge"
 prefix_steam="$WINEPREFIX/drive_c/Program Files (x86)/Steam"
 verify_runner() {
   if [ ! -d "$bridge_src/wine/$np_build" ]; then
-    echo "=== no patched ntdll for build $np_build in the bridge, set it up in NotProton ===" >> "$log" 2>&1 || true
+    echo "=== no patched ntdll for build $np_build in the bridge, set it up in Neutron ===" >> "$log" 2>&1 || true
     return
   fi
   for arch in x86_64-windows i386-windows aarch64-windows; do
@@ -1097,9 +1324,9 @@ verify_runner() {
     live="$CX_ROOT/lib/wine/$arch/ntdll.dll"
     [ -f "$staged" ] || continue
     if [ ! -f "$live" ]; then
-      echo "=== runner has no $arch ntdll, set up the runner in NotProton ===" >> "$log" 2>&1 || true
+      echo "=== runner has no $arch ntdll, set up the runner in Neutron ===" >> "$log" 2>&1 || true
     elif ! cmp -s "$staged" "$live"; then
-      echo "=== runner $arch ntdll is not the patched copy, set up the runner in NotProton ===" >> "$log" 2>&1 || true
+      echo "=== runner $arch ntdll is not the patched copy, set up the runner in Neutron ===" >> "$log" 2>&1 || true
     fi
   done
   for arch in i386-windows x86_64-windows "${wine_unix##*/}"; do
@@ -1108,7 +1335,7 @@ verify_runner() {
       *) name="lsteamclient.dll" ;;
     esac
     [ -f "$CX_ROOT/lib/wine/$arch/$name" ] && continue
-    echo "=== runner is missing $arch/$name, set up the runner in NotProton ===" >> "$log" 2>&1 || true
+    echo "=== runner is missing $arch/$name, set up the runner in Neutron ===" >> "$log" 2>&1 || true
   done
 }
 install_lsteamclient_trigger() {
@@ -1236,7 +1463,7 @@ if [ -d "$bridge_src" ] && [ -n "$WINEPREFIX" ]; then
       fi
     done
     if [ "$unstaged" -eq 1 ]; then
-      show_alert "Steam files could not be copied" "NotProton could not copy a file into this game's prefix. Open this prefix's notproton-run.log for details."
+      show_alert "Steam files could not be copied" "Neutron could not copy a file into this game's prefix. Open this prefix's neutron-run.log for details."
       exit 1
     fi
   fi
@@ -1249,7 +1476,7 @@ if [ -d "$bridge_src" ] && [ -n "$WINEPREFIX" ]; then
   done
   verify_runner
   if ! install_lsteamclient_trigger; then
-    show_alert "Steam files could not be copied" "NotProton could not copy a file into this game's prefix. Open this prefix's notproton-run.log for details."
+    show_alert "Steam files could not be copied" "Neutron could not copy a file into this game's prefix. Open this prefix's neutron-run.log for details."
     exit 1
   fi
   install_legacy_steam_dll
@@ -1320,7 +1547,7 @@ bundle_name=$(printf '%s' "$game_name" | tr -d '/:"`$\\')
 bundle_name=${bundle_name#"${bundle_name%%[!.]*}"}
 [ -n "$bundle_name" ] || bundle_name="Steam Game"
 game_name_xml=$(printf '%s' "$game_name" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
-loader_root="$HOME/Library/Application Support/notproton/launchers/$app_id"
+loader_root="$HOME/Library/Application Support/neutron/launchers/$app_id"
 mkdir -p "$loader_root"
 loader_app="$loader_root/$bundle_name.app"
 find "$loader_root" -maxdepth 1 -name '.build.*' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
@@ -1350,7 +1577,7 @@ cat > "$loader_contents/Info.plist" <<PLIST
 <dict>
   <key>CFBundleName</key><string>$game_name_xml</string>
   <key>CFBundleDisplayName</key><string>$game_name_xml</string>
-  <key>CFBundleIdentifier</key><string>com.notproton.launcher.$app_id</string>
+  <key>CFBundleIdentifier</key><string>us.flymedia.neutron.launcher.$app_id</string>
   <key>CFBundleExecutable</key><string>launcher</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
@@ -1386,9 +1613,9 @@ fi
 cat > "$loader_macos/launcher" <<LAUNCHER
 #!/bin/sh
 export WINELOADER="$WINELOADER"
-wine_log="$loader_root/notproton-wine.log"
+wine_log="$loader_root/neutron-wine.log"
 exec > "\$wine_log" 2>&1
-shim="$HOME/Library/Application Support/notproton/overlay-shim.dylib"
+shim="$HOME/Library/Application Support/neutron/overlay-shim.dylib"
 if [ -n "\$STEAM_DYLD_INSERT_LIBRARIES" ]; then
   if [ -f "\$shim" ]; then
     export DYLD_INSERT_LIBRARIES="\$shim:\$STEAM_DYLD_INSERT_LIBRARIES"
@@ -1396,6 +1623,21 @@ if [ -n "\$STEAM_DYLD_INSERT_LIBRARIES" ]; then
   else
     export DYLD_INSERT_LIBRARIES="\$STEAM_DYLD_INSERT_LIBRARIES"
   fi
+fi
+# dyld drops DYLD_* on the way through /bin/sh, so the engine's library paths are set here
+if [ -r "$CX_ROOT/runtime.env" ]; then
+  while IFS= read -r line || [ -n "\$line" ]; do
+    case "\$line" in DYLD_FALLBACK_LIBRARY_PATH=*|DYLD_FALLBACK_FRAMEWORK_PATH=*) export "\$line" ;; esac
+  done < "$CX_ROOT/runtime.env"
+fi
+# Highball's own values for this game replace the engine defaults above
+if [ -n "$np_hb_env_file" ] && [ -r "$np_hb_env_file" ]; then
+  while IFS= read -r line || [ -n "\$line" ]; do
+    case "\$line" in
+      DYLD_FALLBACK_LIBRARY_PATH=*|DYLD_FALLBACK_FRAMEWORK_PATH=*) export "\$line" ;;
+      DYLD_INSERT_LIBRARIES=*) export DYLD_INSERT_LIBRARIES="\${DYLD_INSERT_LIBRARIES:+\$DYLD_INSERT_LIBRARIES:}\${line#DYLD_INSERT_LIBRARIES=}" ;;
+    esac
+  done < "$np_hb_env_file"
 fi
 [ -n "\$NOTPROTON_GAME_CWD" ] && cd "\$NOTPROTON_GAME_CWD"
 "$WINELOADER" "\$@"
@@ -1503,6 +1745,15 @@ for name in $(env | LC_ALL=C sed -nE 's/^(CX_APPLEGPTK_LIBD3DSHARED_PATH|Steam[A
   # shellcheck disable=SC2154 # eval assigns value on the line above
   set -- --env "$name=$value" "$@"
 done
+# Highball: forward the engine environment, LaunchServices passes only what is named here
+if [ "$np_runtime" = highball ]; then
+  for name in WINEUSERNAME WINEDLLPATH_PREPEND CX_FWD_COMPAT_GL_CTX $np_hb_keys; do
+    case "$name" in DYLD_*) continue ;; esac
+    eval "value=\${$name-}"
+    [ -n "$value" ] || continue
+    set -- --env "$name=$value" "$@"
+  done
+fi # highball forward
 set -- \
   --env CX_ROOT="$CX_ROOT" \
   --env CX_HOME="$CX_HOME" \
@@ -1522,12 +1773,17 @@ set -- \
 lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A"
 lsregister="$lsregister/Frameworks/LaunchServices.framework/Support/lsregister"
 [ -x "$lsregister" ] && "$lsregister" -f "$loader_app" >> "$log" 2>&1 || true
+if [ "$np_runtime" = highball ] && [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
+  np_hb_launch_mark="$STEAM_COMPAT_DATA_PATH/neutron-launch.mark"
+  : > "$np_hb_launch_mark" 2>/dev/null || np_hb_launch_mark=""
+fi
 open -n -W -a "$loader_app" "$@" >> "$log" 2>&1 &
 open_pid=$!
 /usr/bin/caffeinate -d -i -w "$open_pid" >> "$log" 2>&1 &
 status=0
 wait "$open_pid" || status=$?
 echo "=== game exited status=$status, killing wine prefix ===" >> "$log" 2>&1 || true
+[ "$np_runtime" != highball ] || highball_renderer_report
 kill_wine_prefix
 echo "=== wine prefix killed, session ending ===" >> "$log" 2>&1 || true
 exit $status

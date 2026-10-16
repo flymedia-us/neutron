@@ -19,7 +19,7 @@ under the Steamworks SDK license whenever they are used.
 It also compiles against OpenVR and Wine headers, which are BSD-3-Clause and
 LGPL-V2, respectively.
 
-The app bundle embeds Sparkle, which checks for and installs updates. Sparkle is
+The upstream app embeds Sparkle, which checks for and installs updates. Sparkle is
 MIT licensed, see
 https://github.com/sparkle-project/Sparkle/blob/2.10.0/LICENSE
 
@@ -34,3 +34,37 @@ These third party files carry their original notices from the project authors:
   steam-shim/json/json-forwards.h    JsonCpp, public domain / MIT (header)
   vendor/cJSON.c                     cJSON, MIT (header)
   vendor/cJSON.h                     cJSON, MIT (header)
+
+Highball
+========
+
+The highball-env helper (app/Sources/highball-env, app/Sources/HighballEnvCore) links
+HighballKit from Highball by Gauthier Piarrette, https://github.com/gauthierpiarrette/highball,
+licensed under GPLv3. The exact version is pinned in app/Package.swift and app/Package.resolved.
+
+third_party/highball-db/highball-db.json is a snapshot of game rows and game recipes from
+highball-db, https://github.com/gauthierpiarrette/highball-db, dedicated to the public domain
+under CC0-1.0 (third_party/highball-db/LICENSE). Its commit is recorded in the file's "source"
+field. highball-db's ODbL-licensed predictions (db/derived) and its MIT-licensed anti-cheat map
+are not included.
+
+Proton-ish modifications
+========================
+
+Modified by Proton-ish contributors, 2026. Proton-ish is a fork of NotProton
+(https://github.com/NotProtonNot/NotProton). The modifications are licensed under
+GPLv3, like the bulk of the project. Each modification is recorded in the git history
+of https://github.com/MagnusPladsen/Proton-ish and summarised under "Changes from
+upstream" in README.md. All licensing terms above continue to apply.
+
+Neutron modifications
+=====================
+
+Modified by Fly Media contributors, 2026. Neutron is a direct fork of NotProton
+(https://github.com/NotProtonNot/NotProton), with Highball integration adapted from
+Proton-ish (https://github.com/MagnusPladsen/Proton-ish). Neutron's
+modifications are licensed under GPLv3. Original attribution and third-party
+licenses remain in place. Modification history: https://github.com/flymedia-us/neutron.
+
+Neutron checks for updates by opening its own GitHub releases page. It does not
+embed the upstream app's Sparkle updater or trust the upstream publisher's key.

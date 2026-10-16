@@ -42,7 +42,7 @@ struct InstallOutcome: Sendable {
 }
 
 enum SteamInstaller {
-    static let step = String(localized: "Install NotProton")
+    static let step = String(localized: "Install Neutron")
 
     typealias ClientStopper = @Sendable (URL, () -> Void) throws -> Bool
     typealias BundleRegistrar = @Sendable (URL) -> Void
@@ -62,6 +62,8 @@ enum SteamInstaller {
         overlayShim: URL = SupportPaths.overlayShim,
         iconmaker: URL = SupportPaths.iconmaker,
         appinfo: URL = SupportPaths.appinfo,
+        highballEnv: URL = SupportPaths.highballEnv,
+        highballDB: URL = SupportPaths.highballDB,
         deployedVersion: URL = SupportPaths.deployedVersion,
         backups: URL = SupportPaths.backups,
         compatTools: URL = SupportPaths.Steam.compatTools,
@@ -77,6 +79,7 @@ enum SteamInstaller {
         stopClient: ClientStopper = stopTheClient,
         register: BundleRegistrar = { SteamBundle.register($0) },
         resetInputAccess: () -> Void = resetInputAccess,
+        requirement: (URL) -> String? = designatedRequirement(of:),
         report: @escaping @Sendable (InstallPhase) -> Void = { _ in }
     ) throws -> InstallOutcome {
         report(.checkingPayload)
@@ -92,7 +95,7 @@ enum SteamInstaller {
             ? nil : try DeploymentContent.acquireInstallationLock(in: lockFolder, steamFolder: app.deletingLastPathComponent())
         defer { installationLock?.release() }
         guard let dylibHashes = try MachOBuild.hashesIgnoringSignature(of: payload.dylib) else {
-            throw StepFailure(step: step, detail: String(localized: "The bundled NotProton dylib is invalid."))
+            throw StepFailure(step: step, detail: String(localized: "The bundled Neutron dylib is invalid."))
         }
         let build = DeploymentContent.Build(version: version, builtAt: payload.builtAt,
                                             dylibHashes: dylibHashes)
@@ -104,15 +107,15 @@ enum SteamInstaller {
         let files = DeploymentContent.files(
             payload: payload, bridgePayload: bridgeLocated, app: app, bridge: bridge,
             signatures: signatures, fonts: fonts, overlayShim: overlayShim, iconmaker: iconmaker, appinfo: appinfo,
-            compatTools: compatTools, tools: tools, runners: runners)
+            highballEnv: highballEnv, highballDB: highballDB, compatTools: compatTools, tools: tools, runners: runners)
         let content = try DeploymentContent.inspect(files: files, bundled: build, installed: previousBuild,
                                                    legacyVersion: SteamBundle.deployedVersion(at: deployedVersion))
         guard content != .newerInstalled else {
-            throw StepFailure(step: step, detail: String(localized: "A newer NotProton build is installed. Use that build to update or repair the installed files."))
+            throw StepFailure(step: step, detail: String(localized: "A newer Neutron build is installed. Use that build to update or repair the installed files."))
         }
         func refuseRunningRunners() throws {
             for id in RunnerStore.clonedBuilds(in: runners) where runnerIsRunning(SupportPaths.runnerRoot(forBuild: id, runners: runners)) {
-                throw StepFailure(step: step, detail: String(localized: "A game or Wine tool is running on build \(id). Quit it before updating NotProton."))
+                throw StepFailure(step: step, detail: String(localized: "A game or Wine tool is running on build \(id). Quit it before updating Neutron."))
             }
         }
         try refuseRunningRunners()
@@ -162,19 +165,21 @@ enum SteamInstaller {
             backedUp = try backUpPlist(plist, into: backups)
 
             let priorPlist = try? Data(contentsOf: plist)
-            let priorHash = cdhash(of: app)
+            // macOS keys Steam's Accessibility grant on the designated requirement; the local
+            // identity keeps it the same across re-signs, an ad hoc signature changes it every time
+            let priorRequirement = requirement(app)
             do {
                 try setInsert(at: plist, to: dylib)
 
                 report(.signing)
                 try adHocSign(dylib)
                 try adHocSign(app.appending(path: "Contents/MacOS/steam_osx"))
-                try adHocSign(app)
+                try signSteamBundle(app)
             } catch {
                 revertPlist(priorPlist, at: plist, app: app)
                 throw error
             }
-            if cdhash(of: app) != priorHash {
+            if priorRequirement == nil || requirement(app) != priorRequirement {
                 resetInputAccess()
             }
         }
@@ -187,7 +192,7 @@ enum SteamInstaller {
             AppLog.note("install: bundle declares \(landed ?? "no insert")")
             throw StepFailure(
                 step: step,
-                detail: String(localized: "Steam is set up to inject a different dylib. Please repair Steam before installing NotProton.")
+                detail: String(localized: "Steam is set up to inject a different dylib. Please repair Steam before installing Neutron.")
             )
         }
 
@@ -260,7 +265,7 @@ enum SteamInstaller {
         guard foreign.isEmpty else {
             throw StepFailure(
                 step: step,
-                detail: String(localized: "Another dylib is present. Repair your Steam install before installing NotProton.")
+                detail: String(localized: "Another dylib is present. Repair your Steam install before installing Neutron.")
             )
         }
     }
@@ -268,7 +273,7 @@ enum SteamInstaller {
     static func needsPatching(plist: URL, dylib: URL, shipping: URL, app: URL) throws -> Bool {
         let deployed = SteamBundle.currentInsert(at: plist) == dylib.path(percentEncoded: false)
             && SteamBundle.currentControllerBlock(at: plist) == SteamBundle.controllerBlockValue
-        let file = DeploymentContent.File(source: shipping, destination: dylib, name: "notproton.dylib", allowsResigning: true)
+        let file = DeploymentContent.File(source: shipping, destination: dylib, name: SupportPaths.dylibName, allowsResigning: true)
         if deployed, try file.matches() {
             AppLog.note("install: Steam already carries this dylib, installing for this account only")
             return false
@@ -286,10 +291,10 @@ enum SteamInstaller {
     }
 
     private static let mismatchAcrossAccounts =
-        String(localized: "Steam has a different copy of NotProton, installed by another account on this Mac. Update NotProton from that account, then try again.")
+        String(localized: "Steam has a different copy of Neutron, installed by another account on this Mac. Update Neutron from that account, then try again.")
 
     private static let unpatchedAcrossAccounts =
-        String(localized: "Steam has not been set up for NotProton, and this account cannot change it. Install from the account that owns Steam.")
+        String(localized: "Steam has not been set up for Neutron, and this account cannot change it. Install from the account that owns Steam.")
 
     static func assertBundleIsWritable(_ app: URL) throws {
         let directory = app.appending(path: "Contents/MacOS")
@@ -335,7 +340,7 @@ enum SteamInstaller {
     static func revertPlist(_ bytes: Data?, at plist: URL, app: URL) {
         guard let bytes else { return }
         try? bytes.write(to: plist)
-        try? adHocSign(app)
+        try? signSteamBundle(app)
     }
 
     static func setInsert(at plist: URL, to dylib: URL) throws {
@@ -353,13 +358,22 @@ enum SteamInstaller {
         try SteamBundle.writeInfoPlist(dict, at: plist)
     }
 
-    static func adHocSign(_ url: URL, step: String = step) throws {
+    // The user's Steam signed with the local identity keeps its privacy permissions across
+    // installs. Any other bundle, or a failed signature, stays ad hoc.
+    static func signSteamBundle(_ app: URL, step: String = step, identity: (() -> String?)? = nil) throws {
+        let isUsersSteam = app.standardizedFileURL.path == SupportPaths.Steam.app.standardizedFileURL.path
+        let provider = identity ?? { isUsersSteam ? LocalSigningIdentity.ensure() : nil }
+        if let identity = provider(), (try? adHocSign(app, step: step, identity: identity)) != nil { return }
+        try adHocSign(app, step: step)
+    }
+
+    static func adHocSign(_ url: URL, step: String = step, identity: String = "-") throws {
         let path = url.path(percentEncoded: false)
-        var result = try Shell.run("/usr/bin/codesign", ["-f", "-s", "-", path])
+        var result = try Shell.run("/usr/bin/codesign", ["-f", "-s", identity, path])
         // Fixes codesign refusing a Steam.app that carries Finder info or a resource fork.
         if !result.succeeded, result.stderr.contains("detritus not allowed") {
             clearFinderData(in: enclosingBundle(of: url))
-            result = try Shell.run("/usr/bin/codesign", ["-f", "-s", "-", path])
+            result = try Shell.run("/usr/bin/codesign", ["-f", "-s", identity, path])
         }
         guard result.succeeded else {
             throw StepFailure(
@@ -393,11 +407,11 @@ enum SteamInstaller {
         }
     }
 
-    static func cdhash(of app: URL) -> String? {
-        guard let result = try? Shell.run("/usr/bin/codesign", ["-dvvv", app.path(percentEncoded: false)]) else { return nil }
+    static func designatedRequirement(of app: URL) -> String? {
+        guard let result = try? Shell.run("/usr/bin/codesign", ["-d", "-r-", app.path(percentEncoded: false)]) else { return nil }
         return (result.stdout + result.stderr).split(separator: "\n")
-            .first { $0.hasPrefix("CDHash=") }
-            .map { String($0.dropFirst("CDHash=".count)) }
+            .first { $0.hasPrefix("designated => ") }
+            .map { String($0.dropFirst("designated => ".count)) }
     }
 
     // macOS does not automatically clear a pre-existing input access approval, so it needs to be cleared

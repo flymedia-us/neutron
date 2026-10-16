@@ -31,21 +31,21 @@ struct UninstallOutcome: Sendable {
     var partialRemoval: String? {
         guard !unreachableSteam.isEmpty else { return nil }
         return unreachableSteam.map {
-            String(localized: "NotProton has been partially removed, because Steam at \($0.path(percentEncoded: false)) cannot be found. Delete that copy of Steam and reinstall it to fully remove NotProton.")
+            String(localized: "Neutron has been partially removed, because Steam at \($0.path(percentEncoded: false)) cannot be found. Delete that copy of Steam and reinstall it to fully remove Neutron.")
         }.joined(separator: "\n\n")
     }
 }
 
 enum Uninstall {
-    static let step = String(localized: "Remove NotProton")
+    static let step = String(localized: "Remove Neutron")
 
     static func confirmation(modifications: SteamModifications = .shared) -> String {
         let missing = ((try? modifications.paths()) ?? []).filter { SupportPaths.Steam.isUnreachable($0) }
         guard !missing.isEmpty else {
-            return String(localized: "Steam is restored to its unmodified state and NotProton is removed, including the compatibility tool that lives inside the Steam folder. Windows games and Steam Play prefixes are not removed.")
+            return String(localized: "Steam is restored to its unmodified state and Neutron is removed, including the compatibility tool that lives inside the Steam folder. Windows games and Steam Play prefixes are not removed.")
         }
         return missing.map {
-            String(localized: "Steam at \($0.path(percentEncoded: false)) isn't connected, so NotProton can't be removed from it. All other NotProton data is removed, except for Windows Games and prefixes.")
+            String(localized: "Steam at \($0.path(percentEncoded: false)) isn't connected, so Neutron can't be removed from it. All other Neutron data is removed, except for Windows Games and prefixes.")
         }.joined(separator: "\n\n")
     }
 
@@ -59,6 +59,7 @@ enum Uninstall {
         updateBlocks: [URL] = UpdateBlock.paths,
         legacyCompat: URL = SupportPaths.Steam.legacyCompat,
         compatTools: [URL] = SupportPaths.Steam.notprotonTools(),
+        compatConfig: URL = SupportPaths.Steam.compatConfig,
         directories: [URL] = [
             SupportPaths.support,
             SupportPaths.packageDownloads.deletingLastPathComponent(),
@@ -102,6 +103,10 @@ enum Uninstall {
                 try modifications.mark(target)
                 stopped = try stop(target) { report(.stoppingClient) } || stopped
                 checkedClient = true
+                // Steam is stopped now: take our tool out of its default-tool setting
+                if try SteamCompatConfig.clearDefaultTool(in: compatConfig) {
+                    AppLog.note("uninstall: cleared Steam's default tool")
+                }
                 report(.detaching)
                 detached = try detach(from: target, innerPlist: innerPlist, updateBlocks: updateBlocks) || detached
                 steamInstalled = true
@@ -193,6 +198,12 @@ enum Uninstall {
     static func remove(legacyCompat: URL, compatTools: [URL], directories: [URL]) throws -> [String] {
         let files = FileManager.default
         var removed: [String] = []
+
+        // The signing keychain lives in the support folder; take it off the search list first
+        let keychain = LocalSigningIdentity.keychain.standardizedFileURL.path
+        if directories.contains(where: { keychain.hasPrefix($0.standardizedFileURL.path + "/") }) {
+            LocalSigningIdentity.removeFromSearchList()
+        }
 
         for target in [legacyCompat] + compatTools + directories {
             let path = target.path(percentEncoded: false)

@@ -14,7 +14,7 @@ struct NotProtonApp: App {
     }
 
     var body: some Scene {
-        Window("NotProton", id: "main") {
+        Window("Neutron", id: "main") {
             RootView(pane: $pane)
                 .environment(status)
                 .environment(prefixes)
@@ -31,6 +31,10 @@ struct NotProtonApp: App {
     @CommandsBuilder
     private var menus: some Commands {
         CommandGroup(replacing: .newItem) {}
+
+        CommandGroup(replacing: .appInfo) {
+            Button("About Neutron") { AboutCredits.show() }
+        }
 
         CommandGroup(after: .appInfo) {
             Button("Check for Updates…") { updater.check() }
@@ -65,8 +69,8 @@ struct NotProtonApp: App {
                 .keyboardShortcut("i", modifiers: .command)
                 .disabled(!status.canInstall)
 
-            Button("Set Up Compatibility Tool") { Task { await status.requestCompatibilityTool() } }
-                .disabled(!status.canInstall || status.setupSource == nil)
+            Button("Set Up Compatibility Tool") { Task { await status.requestHighballCompatibilityTool() } }
+                .disabled(!status.canInstall || status.snapshot?.highball.contains(where: \.isUsable) != true)
 
             Button("Fetch Valve Binaries") { Task { await status.fetchValveBinaries() } }
                 .disabled(!status.canInstall)

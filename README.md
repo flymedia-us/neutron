@@ -1,46 +1,63 @@
-# NotProton
+# Neutron
 
-NotProton enables the Steam Play experience from Linux Steam in the macOS Steam client.
+Free Steam Play for Apple Silicon Macs, by Fly Media. Neutron lets the normal macOS Steam client launch Windows games through Highball's free Wine engine. It includes guided engine setup and fixes for games stored on external exFAT drives.
 
-This is done by forcibly enabling the Steam Play functionality in macOS Steam (which is
-present and inert) as well as by porting some components of Valve's Proton to macOS.
+Neutron is a fork of NotProton by [NotProtonNot](https://github.com/NotProtonNot/NotProton). Its Highball integration is adapted from [Proton-ish](https://github.com/MagnusPladsen/Proton-ish), with attribution preserved. It uses [HighballKit and Highball's engine](https://github.com/gauthierpiarrette/highball) and the [highball-db](https://github.com/gauthierpiarrette/highball-db) compatibility data. Neutron is not affiliated with or endorsed by these projects, Valve, or Apple.
 
-This tool is intended to be used with the stable Steam Client (version 1791918634) as well as the beta Steam Client (version 1791686101) paired with **CrossOver 26.3 or CrossOver [Preview](https://www.codeweavers.com/preview)
-20261006 / 20260821 / 20261015**, with more supported versions to come.
+## Set up
 
-Supporting specifically CrossOver is a design goal of this project. Better support for modifying CrossOver (using custom builds of DXMT/patched D3DMetal/MacGameVideoFix) will come in a future update, but support for alternatives to CrossOver itself is not planned.
+You need an Apple Silicon Mac, macOS 15 or later, Steam for macOS, and Rosetta 2.
 
-Both the FEX and the Rosetta versions are supported. I recommend using the FEX version of the 
-Preview 20261006, as it includes both the FEX version as well as the Rosetta one. 
+1. Download `Neutron.zip` from this repository's Releases and move `Neutron.app` to Applications. Until a release is published, build from source below or use a successful Actions build artifact.
+2. Open Neutron. Builds are ad hoc signed; macOS may require **Privacy & Security → Open Anyway**. Allow App Management when requested, because Neutron patches Steam.
+3. Click **Set Up Neutron**. Read Apple's D3DMetal license and choose whether to accept it. Neutron installs the Steam integration, downloads or reuses Highball's engine, verifies its downloads, sets up the compatibility tool, and makes it the default when Steam has none. No separate Highball app is needed.
+4. Start Steam normally from its Mac app. Windows-only games show Play. For a game with a native Mac version, select Neutron's Highball tool under **Properties → Compatibility** to use the Windows version.
 
-I further recommend going into Steam Settings - Compatibility and selecting the Rosetta version as your default compatibility tool. You can select FEX on a per game basis by right clicking a game in Steam, going into Properties - Compatibility and selecting FEX there.
+The download is about 440 MB plus any missing Steam components. D3DMetal is optional and is used only after Apple's license is accepted. Without it, DXMT/DXVK are available, but games requiring D3DMetal will not work. **Check for Updates** opens Neutron's own releases page; updates are installed explicitly.
 
-If a game has a native macOS version as well as a Windows one, Steam will download the macOS version. To override this behavior, right click on the game, select Properties, select Compatibility. Enable 'Force the use of a specific Steam Play compatibility tool'. Select whichever version of CrossOver you want to do use. That will make Steam download the Windows version. Unchecking the 'Force the use...' box or selecting 'No Compatibility Tool' in the drop down list will revert to the macOS version of the game, with the specifics there varying based on your Steam version.
+## External and portable libraries
 
-**Valve Anti-Cheat is not supported.** Proton itself does not support VAC in Valve titles; Valve ships native Linux ports instead. VAC titles will launch in Insecure Mode and will not allow matchmaking. 
+Keep your Windows Steam library on the existing exFAT drive and add that same library in Steam on each computer. Neutron handles macOS AppleDouble metadata and copies prefix files when the drive rejects hard links. Highball's template creation receives the engine's library paths. These fixes are embedded in Neutron; no launcher patch needs to be reapplied after restarting Steam.
 
-**This project now has a brew cask.** For brew users, you can install via ``brew install --cask notprotonnot/notproton/notproton``
+The game payload and Mac Wine prefixes can stay on the drive. Steam, Neutron, the engine, permissions, and prerequisites still need setup on each host. A drive cannot make every Windows game compatible with every Mac. DRM, other launchers, anti-cheat, and game-specific save locations can limit portability. This exFAT behavior was tested on macOS 27; other filesystem drivers can differ. Do not reformat an existing drive to try Neutron.
 
-Please read NOTICE for license information.
+**Tetris Effect: Connected (1003590):** Automatic uses D3DMetal when available; this reached a visible menu/play screen in our Apple Silicon macOS 27 test, while DXMT produced a black screen. Explicit per-game graphics choices take precedence. This is a startup test, not a complete gameplay or online-compatibility certification.
 
-Please open issue reports with any issues. PRs are welcome and encouraged.
+Neutron uses its own app identity (`us.flymedia.neutron`) and support directory (`~/Library/Application Support/neutron`). The Highball engine remains in Highball's standard shared folder. Existing prefix marker names and upstream engine IDs are retained for compatibility. Install only one Steam integration at a time; use the existing integration's removal flow before switching. Keep prefix backups and saves.
 
-There are many people who worked on similar ideas, similar projects. I did not base NotProton on their work, but I still want to 
-give thanks to the people who came before me:
+## Upstream maintenance
 
-[Nat Brown](https://github.com/natbro) made [Kaon](https://github.com/natbro/kaon), which is similar in goals to NotProton.
+NotProton is the direct code base and primary upstream. The initial Neutron feature commit sits on NotProton 1.1.9 (`d5c6065`), including its focus and VC++ runtime fixes. Highball support is a separate import recorded in `UPSTREAMS.json`; Neutron does not wait for or automatically merge the rest of Proton-ish. Full NotProton history is retained. Set up the optional local remotes with:
 
-mont127's [Neutron](https://github.com/mont127/Neutron) is also a similar idea, but implemented differently. 
+```sh
+git remote add upstream https://github.com/NotProtonNot/NotProton.git
+git fetch --all
+```
 
-[Gio](https://github.com/giodotblue) was working enabling Steam Play inside of Steam on macOS prior to the release of NotProton itself. 
-I would have done things differently had I been aware of that. 
+The **upstream sync** workflow runs daily and on demand. It proposes merges directly from NotProton as pull requests, reports conflicts as issues, refreshes pinned HighballKit/highball-db, and reports newer engine builds that need hash/detour validation. It never merges or releases automatically. Brand, filesystem and runtime checks must pass before incorporating upstream changes.
 
-Thanks to everyone who has positively contributed to macOS gaming. 
+It uses the repository's `GITHUB_TOKEN`; enable GitHub Actions and **Allow GitHub Actions to create and approve pull requests** in repository settings. A `SYNC_TOKEN` is optional for organizations with different bot policies. Checks for token-created PRs are explicitly dispatched so GitHub's event suppression does not silently skip CI. New engine builds require manual verification before use.
 
-Developer Notes:
+## Build and test
 
-As far as the source structure goes, the macOS app itself is located in the ```app``` folder. The core logic is in ```dylib```.
-```lsteamclient``` is a macOS port of Valve's lsteamclient. ```steam-shim```is a port of Valve's
-steam-helper from Proton 9.0. ntdll-patch patches the copy of CrossOver that the app
-makes/places in the ```~/Library/Application Support/notproton/runners/``` folder so that
-lsteamclient is loaded.
+Use Xcode 27 or newer. The build pins HighballKit and engine manifests; do not substitute engine files without updating the verified hashes and detours.
+
+```sh
+brew install cmake shellcheck node mingw-w64 bison flex fontforge gpatch
+git clone https://github.com/jmpews/Dobby.git vendor/dobby
+git -C vendor/dobby checkout 5dfc8546954ce3b3198132ab13fddb89ee92cdd7
+make dobby all overlay-shim iconmaker appinfo bridge
+# Font generation also needs the pinned Python packages used in .github/workflows/app.yml.
+make fonts app
+make app-tests seedcheck envcheck settingscheck bridgecheck gamedrivecheck launchercheck brandcheck synccheck
+```
+
+The full app workflow builds and packages `Neutron.zip`. The release workflow is an explicit manual dispatch and publishes prereleases only. Neutron does not reuse another publisher's update-signing key or Homebrew tap.
+
+## Changes from upstream
+
+- 2026-10-16: Fly Media Neutron identity, Highball-only guided setup, removal of funding/purchase prompts and paid-engine choices, explicit Neutron updates, direct NotProton sync, exFAT prefix fixes, complete Highball template environment, and the tested Tetris Effect renderer default.
+
+## License and credits
+
+Neutron modifications are GPLv3. See [NOTICE](NOTICE), [LICENSE](LICENSE), and the component licenses for upstream authorship and third-party terms. Required notices are preserved. Some runtime components have separate licenses, including Apple's optional D3DMetal agreement. Wine engine identifiers reflect their upstream artifacts; they are not product recommendations.

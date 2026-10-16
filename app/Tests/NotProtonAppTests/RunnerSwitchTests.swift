@@ -108,7 +108,7 @@ struct RunnerPrepareTests {
         #expect(toolList(runners) == CompatToolList.contents(
             SupportedRunners.tools(for: [Self.release, Self.fex])
         ))
-        #expect(toolList(runners)?.hasPrefix("notproton-fex\t27.0.0.40921-fex\tfex\t") == true)
+        #expect(toolList(runners)?.hasPrefix("neutron-fex\t27.0.0.40921-fex\tfex\t") == true)
 
         let again = try prepare(Self.release, runners: runners, calls: calls)
         #expect(!again.toolsChanged)
@@ -219,7 +219,7 @@ struct RunnerPrepareTests {
 
     private func holder(_ runners: URL) -> String? {
         toolList(runners)?.split(separator: "\n").map { $0.split(separator: "\t") }
-            .first { $0.first == "notproton" }.map { String($0[1]) }
+            .first { $0.first == "neutron" }.map { String($0[1]) }
     }
 
     @Test("A 1.0 install keeps the legacy name on the build runners/current pointed at")
@@ -237,7 +237,7 @@ struct RunnerPrepareTests {
 
         try sync(runners)
         #expect(holder(runners) == Self.rosetta.id)
-        #expect(toolList(runners)?.contains("notproton-fex\t\(Self.fex.id)\tfex\t") == true)
+        #expect(toolList(runners)?.contains("neutron-fex\t\(Self.fex.id)\tfex\t") == true)
     }
 
     @Test("Without FEX support a 1.0 FEX install keeps its legacy name")
@@ -278,8 +278,8 @@ struct RunnerPrepareTests {
         )
         try sync(runners)
         #expect(holder(runners) == Self.fex.id)
-        #expect(toolList(runners)?.contains("notproton-preview\t\(Self.rosetta.id)\t") == true)
-        #expect(toolList(runners)?.contains("notproton-fex-rosetta\t\(Self.fex.id)\t") == true)
+        #expect(toolList(runners)?.contains("neutron-preview\t\(Self.rosetta.id)\t") == true)
+        #expect(toolList(runners)?.contains("neutron-fex-rosetta\t\(Self.fex.id)\t") == true)
     }
 
     @Test("A fresh install gives the legacy name to nobody")
@@ -289,8 +289,8 @@ struct RunnerPrepareTests {
 
         try sync(runners)
         #expect(holder(runners) == nil)
-        #expect(toolList(runners)?.hasPrefix("notproton-fex-41069\t\(Self.fex41069.id)\tfex\t") == true)
-        #expect(toolList(runners)?.contains("notproton-preview-41069\t\(Self.preview41069.id)\t") == true)
+        #expect(toolList(runners)?.hasPrefix("neutron-fex-41069\t\(Self.fex41069.id)\tfex\t") == true)
+        #expect(toolList(runners)?.contains("neutron-preview-41069\t\(Self.preview41069.id)\t") == true)
     }
 
     @Test("A 1.0.3 install keeps the legacy name on 41069")
@@ -306,7 +306,7 @@ struct RunnerPrepareTests {
         #expect(holder(runners) == Self.preview41069.id)
         try sync(runners)
         #expect(holder(runners) == Self.preview41069.id)
-        #expect(toolList(runners)?.contains("notproton-fex-41069\t\(Self.fex41069.id)\tfex\t") == true)
+        #expect(toolList(runners)?.contains("neutron-fex-41069\t\(Self.fex41069.id)\tfex\t") == true)
     }
 
     @Test("A Preview listed under its own name does not take the legacy name later")
@@ -331,9 +331,9 @@ struct RunnerPrepareTests {
         try FileManager.default.createSymbolicLink(
             atPath: current, withDestinationPath: "crossover-\(Self.fex.id)/CrossOver"
         )
-        let run = runners.appending(path: "compatibilitytools.d/notproton/run")
+        let run = runners.appending(path: "compatibilitytools.d/neutron/run")
         try atomicReplace(
-            run, with: Data("CX_ROOT=\"$HOME/Library/Application Support/notproton/runners/current\"\n".utf8),
+            run, with: Data("CX_ROOT=\"$HOME/Library/Application Support/neutron/runners/current\"\n".utf8),
             step: "test"
         )
 
@@ -530,7 +530,7 @@ struct RunnerRemovalTests {
         let runners = try makeRunners(cloning: [Self.rosetta.id, Self.fex.id])
         defer { try? FileManager.default.removeItem(at: runners) }
         let fm = FileManager.default
-        let leftover = runners.appending(path: ".crossover-\(Self.rosetta.id).removing/CrossOver")
+        let leftover = runners.appending(path: ".crossover-\(Self.rosetta.id).removing/root")
         try fm.createDirectory(at: leftover, withIntermediateDirectories: true)
 
         _ = try remove(Self.rosetta.id, runners: runners)
@@ -546,7 +546,7 @@ struct RunnerRemovalTests {
         let runners = try makeRunners(cloning: [Self.rosetta.id])
         defer { try? FileManager.default.removeItem(at: runners) }
         let fm = FileManager.default
-        let leftover = runners.appending(path: ".crossover-\(Self.fex.id).removing/CrossOver")
+        let leftover = runners.appending(path: ".crossover-\(Self.fex.id).removing/root")
         try fm.createDirectory(at: leftover, withIntermediateDirectories: true)
 
         _ = try remove(Self.rosetta.id, runners: runners)
@@ -632,7 +632,8 @@ struct RunnerRemovalTests {
         let template = script.split(separator: "\n").first { $0.contains("template_dir=\"") }
         #expect(template?.contains("template_dir=\"$template_cache/$runner_id\"") == true)
         let names = ["x86_64-unix", "aarch64-unix"].map { arch in
-            expression.replacingOccurrences(of: "$np_build", with: "27.0.0.40921-fex")
+            expression.replacingOccurrences(of: "$np_runtime", with: "crossover")
+                .replacingOccurrences(of: "$np_build", with: "27.0.0.40921-fex")
                 .replacingOccurrences(of: "${wine_unix##*/}", with: arch)
         }
         #expect(SupportPaths.prefixTemplates(forBuild: "27.0.0.40921-fex", in: library).map(\.path)

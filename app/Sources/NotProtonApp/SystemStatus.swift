@@ -25,13 +25,13 @@ struct StatusSnapshot: Sendable {
     var orphanedRunners: [String] = []
     var damagedRunners: [String] = []
     var installContent: DeploymentContent.Status = .unchecked
+    var highball: [HighballEngine] = []
+    var defaultToolRequest: String?
+    var steamDefaultTool: String?
 
     static func capture(bundledVersion: String) -> StatusSnapshot {
-        let installs = CrossOverSource.discover()
-        var licenses: [String: CrossOverLicense.Status] = [:]
-        for install in installs where install.isUsable {
-            licenses[install.id] = CrossOverLicense.check(crossOverRoot: install.crossOverRoot)
-        }
+        let installs: [CrossOverInstall] = []
+        let licenses: [String: CrossOverLicense.Status] = [:]
 
         let runner = RunnerStore.state()
         let installed = RunnerStore.installedBuilds()
@@ -47,7 +47,10 @@ struct StatusSnapshot: Sendable {
             installedRunners: installed,
             orphanedRunners: RunnerStore.orphanedClones(),
             damagedRunners: RunnerStore.damagedClones(),
-            installContent: DeploymentContent.current(version: bundledVersion)
+            installContent: DeploymentContent.current(version: bundledVersion),
+            highball: HighballSource.discover(),
+            defaultToolRequest: DefaultTool.request(),
+            steamDefaultTool: DefaultTool.steamDefault()
         )
     }
 }
@@ -144,13 +147,15 @@ final class SystemStatus {
         guard let snapshot else { return [] }
         var unpatched: [String] = []
         if case .unpatched(let builds, _) = snapshot.runner { unpatched = builds }
+        // Highball runners have their own section
+        let isCrossOver = { (build: String) in SupportPaths.runtime(forBuild: build) == .crossover }
         return CrossOverRow.rows(
             installs: snapshot.crossOver,
             licenses: snapshot.crossOverLicense,
-            installed: snapshot.installedRunners,
-            damaged: snapshot.damagedRunners,
-            orphaned: snapshot.orphanedRunners,
-            unpatched: unpatched
+            installed: snapshot.installedRunners.filter { $0.runtime == .crossover },
+            damaged: snapshot.damagedRunners.filter(isCrossOver),
+            orphaned: snapshot.orphanedRunners.filter(isCrossOver),
+            unpatched: unpatched.filter(isCrossOver)
         )
     }
 
@@ -194,16 +199,29 @@ final class SystemStatus {
 
     func requestInstall() async {
         guard canInstall else { return }
-        checkingLicense = true
-        defer { checkingLicense = false }
-        if let question = Self.activationQuestion(
-            .install,
-            licensed: await checkLicense()?.licensed,
-            runner: snapshot?.runner ?? RunnerState.none
-        ) {
-            pendingConfirmation = question
+        await installIntoSteam()
+    }
+
+    func requestHighballCompatibilityTool() async {
+        guard let engine = HighballSource.discover().first(where: \.isUsable) else {
+            setFailure(String(localized: "Download the Highball engine using Set Up Neutron first."))
+            return
+        }
+        await setUpHighball(engine)
+    }
+
+    func setUpNeutron(acceptD3DMetal: Bool) async {
+        guard canInstall else { return }
+        await installIntoSteam()
+        guard failure == nil else { return }
+        if let engine = HighballSource.discover().first(where: \.isUsable) {
+            if acceptD3DMetal && !engine.d3dmetalAccepted {
+                await enableD3DMetal(engine)
+                guard failure == nil else { return }
+            }
+            await setUpHighball(engine)
         } else {
-            await installIntoSteam()
+            await downloadHighballEngine(acceptD3DMetal: acceptD3DMetal)
         }
     }
 
@@ -308,7 +326,7 @@ final class SystemStatus {
         if SupportPaths.Steam.isUnreachable(current) {
             let alert = NSAlert()
             alert.messageText = String(localized: "Steam at \(current.path(percentEncoded: false)) isn't connected.")
-            alert.informativeText = String(localized: "If NotProton is installed there, it will stay installed. Continue anyway?")
+            alert.informativeText = String(localized: "If Neutron is installed there, it will stay installed. Continue anyway?")
             alert.addButton(withTitle: String(localized: "Continue Anyway"))
             alert.addButton(withTitle: String(localized: "Cancel"))
             guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -344,11 +362,11 @@ final class SystemStatus {
             return String(localized: "\(picked.lastPathComponent) is not Steam.")
         }
         guard !picked.path(percentEncoded: false).contains(":") else {
-            return String(localized: "NotProton cannot use Steam from a folder with a colon in its name.")
+            return String(localized: "Neutron cannot use Steam from a folder with a colon in its name.")
         }
         let deployed = SupportPaths.Steam.deployedDylib(inBundle: current).path(percentEncoded: false)
         if let insert, insert.split(separator: ":").contains(Substring(deployed)) {
-            return String(localized: "NotProton is installed in \(current.path(percentEncoded: false)). Use Repair Steam to remove it before choosing another copy of Steam.")
+            return String(localized: "Neutron is installed in \(current.path(percentEncoded: false)). Use Repair Steam to remove it before choosing another copy of Steam.")
         }
         return nil
     }
@@ -430,6 +448,106 @@ final class SystemStatus {
         }
     }
 
+    func setUpHighball(_ engine: HighballEngine, replacingExisting: Bool = false) async {
+        await perform(from: RunnerSetup.Phase.cloning.label) { progress in
+            let lock = try DeploymentContent.acquireInstallationLock()
+            defer { lock.release() }
+            try await requireInstallableContent()
+            let result = try await Task.detached(priority: .userInitiated) {
+                try RunnerSetup.run(from: engine, replacingExisting: replacingExisting) {
+                    progress($0.label)
+                }
+            }.value
+
+            return runnerOutcome(result) + adoptHighballAsDefault()
+        }
+    }
+
+    // Option C: Highball becomes Steam's default for Windows games only when Steam has no default
+    private func adoptHighballAsDefault() -> String {
+        guard DefaultTool.shouldAdopt(request: DefaultTool.request(), steamDefault: DefaultTool.steamDefault()),
+              let tool = DefaultTool.highballTool(installed: RunnerStore.installedBuilds()),
+              (try? DefaultTool.set(tool)) != nil else { return "" }
+        return " " + String(localized: "Highball is now Steam's default for Windows games.")
+    }
+
+    func setDefaultTool(on wanted: Bool) async {
+        await perform(from: DefaultTool.step) { _ in
+            if wanted {
+                guard let tool = DefaultTool.highballTool(installed: RunnerStore.installedBuilds()) else {
+                    throw StepFailure(step: DefaultTool.step, detail: String(localized: "Set up the Highball engine first."))
+                }
+                try DefaultTool.set(tool)
+                return String(localized: "Highball is Steam's default for Windows games from the next Steam start.")
+            }
+            try DefaultTool.clear()
+            return String(localized: "Steam's default tool is cleared at the next Steam start.")
+        }
+    }
+
+    // Downloads the engine with Highball's own code, then sets it up like a found engine
+    func downloadHighballEngine(acceptD3DMetal: Bool) async {
+        await perform(from: HighballInstaller.step) { progress in
+            guard let build = HighballInstaller.build else {
+                throw StepFailure(step: HighballInstaller.step,
+                                  detail: String(localized: "This build of Neutron supports no Highball engine."))
+            }
+            let payload = try InstallPayload.locate()
+            try await HighballInstaller.run(
+                helper: payload.highballEnv,
+                arguments: HighballInstaller.arguments(manifest: HighballInstaller.manifest(in: payload, build: build),
+                                                       acceptD3DMetal: acceptD3DMetal),
+                progress: progress)
+            guard let engine = HighballSource.discover().first(where: { $0.id == build.bundleVersion && $0.isUsable }) else {
+                throw StepFailure(step: HighballInstaller.step,
+                                  detail: String(localized: "The engine downloaded, but Neutron cannot use it. Open Neutron's log for details."))
+            }
+            let lock = try DeploymentContent.acquireInstallationLock()
+            defer { lock.release() }
+            do {
+                try await requireInstallableContent()
+            } catch {
+                return String(localized: "Highball engine downloaded. Click Install, then Set Up next to the engine.")
+            }
+            let result = try await Task.detached(priority: .userInitiated) {
+                try RunnerSetup.run(from: engine) { progress($0.label) }
+            }.value
+            return runnerOutcome(result) + adoptHighballAsDefault()
+        }
+    }
+
+    func enableD3DMetal(_ engine: HighballEngine) async {
+        await perform(from: String(localized: "Enable D3DMetal")) { progress in
+            let payload = try InstallPayload.locate()
+            try await HighballInstaller.run(helper: payload.highballEnv,
+                                            arguments: ["accept", "--engine", engine.id], progress: progress)
+            do { try RendererList.sync() } catch { AppLog.note("renderer list not written: \(error)") }
+            return String(localized: "D3DMetal is enabled for \(engine.displayName).")
+        }
+    }
+
+    enum HighballCopy: Sendable, Equatable { case notSetUp, ready, needsRepair }
+
+    nonisolated static func highballCopy(_ build: String, installed: [RunnerBuild], runner: RunnerState) -> HighballCopy {
+        guard installed.contains(where: { $0.id == build }) else { return .notSetUp }
+        if case .unpatched(let builds, _) = runner, builds.contains(build) { return .needsRepair }
+        return .ready
+    }
+
+    // Copies left behind when their build is no longer supported, so they can still be removed
+    nonisolated static func highballOrphans(_ orphaned: [String], runners: URL = SupportPaths.runners) -> [String] {
+        orphaned.filter { SupportPaths.runtime(forBuild: $0, runners: runners) == .highball }
+    }
+
+    // What the Highball section says when no engine can be set up
+    nonisolated static func highballNotice(engines: [HighballEngine]) -> String? {
+        guard !engines.isEmpty, !engines.contains(where: \.isUsable) else { return nil }
+        if let newer = engines.first(where: { $0.id.hasPrefix("x64-crossover") }) {
+            return String(localized: "Highball engine \(newer.id) isn't supported yet.")
+        }
+        return String(localized: "Neutron needs Highball's Wine 11 engine. Switch an environment to Wine 11 in its settings in Highball.")
+    }
+
     func fetchValveBinaries() async {
         guard canInstall else { return }
         await perform(from: ValveFetcher.Phase.verifying.label) { progress in
@@ -454,7 +572,7 @@ final class SystemStatus {
             }
         }.value
         guard !running else {
-            throw StepFailure(step: SteamInstaller.step, detail: String(localized: "A game or Wine tool is running. Quit it before updating NotProton."))
+            throw StepFailure(step: SteamInstaller.step, detail: String(localized: "A game or Wine tool is running. Quit it before updating Neutron."))
         }
     }
 
@@ -466,7 +584,7 @@ final class SystemStatus {
         snapshot?.installContent = content
         guard !content.blocksInstallation else {
             throw StepFailure(step: SteamInstaller.step,
-                              detail: String(localized: "Installation is blocked. Refresh Status and use the NotProton app that installed this build."))
+                              detail: String(localized: "Installation is blocked. Refresh Status and use the Neutron app that installed this build."))
         }
     }
 
@@ -478,27 +596,8 @@ final class SystemStatus {
                 try SteamInstaller.run(holdingInstallationLock: true, report: { progress($0.label) })
             }.value
 
-            var parts = [String(localized: "NotProton successfully installed.")]
+            var parts = [String(localized: "Neutron successfully installed.")]
             if result.stoppedClient { parts.append(Self.restartHint) }
-            let install = usableCrossOver
-            let state = await Task.detached(priority: .userInitiated) {
-                (runner: RunnerStore.state(),
-                 payload: PayloadInspector.inspect(),
-                 license: install.map { CrossOverLicense.check(crossOverRoot: $0.crossOverRoot) })
-            }.value
-
-            if let install, state.license?.licensed == true, state.runner == .none {
-                progress(String(localized: "Setting up compatibility tool"))
-                // A tool that came up is the expected case and goes unsaid. Failure
-                // throws, and an unactivated CrossOver is reported below.
-                _ = try await Task.detached(priority: .userInitiated) {
-                    try RunnerSetup.run(from: install) { progress($0.label) }
-                }.value
-            } else if install != nil, state.license?.licensed == false, state.runner == .none {
-                // Not a failure, NotProton was installed but without a compatibility tool
-                parts.append(Self.toolNotActivated)
-            }
-
             // Fetch binaries from Valve
             let valve = try ValvePackageManifest.bundled()
             let needsValve = await Task.detached(priority: .utility) {
@@ -563,8 +662,8 @@ final class SystemStatus {
 
             if let partial = result.partialRemoval { return partial }
             return result.steamNeedsRedownload
-                ? String(localized: "NotProton has been removed. Steam could not be restored. Reinstall Steam from steampowered.com before using it again.")
-                : String(localized: "NotProton has been removed.")
+                ? String(localized: "Neutron has been removed. Steam could not be restored. Reinstall Steam from steampowered.com before using it again.")
+                : String(localized: "Neutron has been removed.")
         }
     }
 

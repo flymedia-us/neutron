@@ -18,7 +18,8 @@ $(cut_block '^runner_id=""' '^if \[ -n ".STEAM_COMPAT_DATA_PATH" \]; then' "")"
 functions="$functions
 $(cut_block '^without_lock_fds\(\) \{' '^\}' 1)"
 np_build=fixture
-export np_build CX_ROOT CX_HOME wine_unix np_tool_dir WINELOADER WINESERVER
+np_runtime=crossover
+export np_build np_runtime CX_ROOT CX_HOME wine_unix np_tool_dir WINELOADER WINESERVER
 export STEAM_COMPAT_DATA_PATH WINEPREFIX template_dir log seed_scratch seed_building
 CX_ROOT="$work/runner"
 CX_HOME="$work/home"
@@ -92,6 +93,32 @@ check test -f "$WINEPREFIX/system.reg"
 check test ! "$template_dir/pfx/drive_c/windows/ntdll.dll" -ef "$WINEPREFIX/drive_c/windows/ntdll.dll"
 printf changed > "$WINEPREFIX/drive_c/windows/ntdll.dll"
 check test "$(cat "$template_dir/pfx/drive_c/windows/ntdll.dll")" = dll
+
+# Simulate a filesystem that accepts symlinks but rejects every hard link.
+fixture
+mkdir -p "$WINEPREFIX/drive_c/users/steamuser/Documents/Game" "$template_dir/pfx/dosdevices"
+printf save > "$WINEPREFIX/drive_c/users/steamuser/Documents/Game/slot.sav"
+ln -s ../drive_c "$template_dir/pfx/dosdevices/c:"
+(
+  # shellcheck disable=SC2329 # install_seed_tree calls this test override indirectly.
+  ln() {
+    case "$1" in -s*) command ln "$@" ;; *) return 1 ;; esac
+  }
+  copy_template_into_prefix
+)
+check test -f "$WINEPREFIX/drive_c/windows/ntdll.dll"
+check test -f "$WINEPREFIX/system.reg"
+check test -f "$WINEPREFIX/.update-timestamp"
+check test "$(readlink "$WINEPREFIX/dosdevices/c:")" = ../drive_c
+check test "$(cat "$WINEPREFIX/drive_c/users/steamuser/Documents/Game/slot.sav")" = save
+check test ! "$template_dir/pfx/drive_c/windows/ntdll.dll" -ef "$WINEPREFIX/drive_c/windows/ntdll.dll"
+
+fixture
+mkdir -p "$WINEPREFIX/drive_c/users/steamuser"
+printf '\000\005\026\007' > "$WINEPREFIX/._drive_c"
+check prefix_is_bare
+printf actual-file > "$WINEPREFIX/._drive_c"
+check test "$(prefix_is_bare && echo unsafe || echo refused)" = refused
 
 fixture
 mkdir -p "$WINEPREFIX/drive_c/users/steamuser/Documents/Game"
@@ -170,6 +197,58 @@ check lay_out_proton_profile
 check test -L "$profile/Documents/Game"
 check test "$(readlink "$profile/Documents/Game")" = "$case_root/offline"
 
+# Highball's Wine names the Windows user after the Mac user, so that name is linked too
+mac_user=$(id -un)
+fixture
+check lay_out_proton_profile
+check test "$(readlink "$WINEPREFIX/drive_c/users/$mac_user")" = steamuser
+check test "$(readlink "$WINEPREFIX/drive_c/users/crossover")" = steamuser
+check prefix_is_bare
+pointed=$(grep -c "pointed $mac_user at steamuser" "$log")
+check lay_out_proton_profile
+check test "$(grep -c "pointed $mac_user at steamuser" "$log")" = "$pointed"
+
+fixture
+profile="$WINEPREFIX/drive_c/users/steamuser"
+mac_profile="$WINEPREFIX/drive_c/users/$mac_user"
+mkdir -p "$mac_profile/AppData/Local/Game" "$mac_profile/Desktop" "$profile/AppData/Local/Game" \
+  "$case_root/mac-documents"
+printf fresh > "$mac_profile/AppData/Local/Game/new.sav"
+printf same > "$mac_profile/AppData/Local/Game/same.sav"
+printf same > "$profile/AppData/Local/Game/same.sav"
+printf played > "$mac_profile/AppData/Local/Game/newer.sav"
+printf cloud > "$profile/AppData/Local/Game/newer.sav"
+touch -t 202001010000 "$profile/AppData/Local/Game/newer.sav"
+printf stale > "$mac_profile/AppData/Local/Game/older.sav"
+touch -t 202001010000 "$mac_profile/AppData/Local/Game/older.sav"
+printf synced > "$profile/AppData/Local/Game/older.sav"
+printf private > "$case_root/mac-documents/private.txt"
+ln -s "$case_root/mac-documents" "$mac_profile/Documents"
+ln -s /nowhere/Desktop "$mac_profile/Desktop/My Mac Desktop"
+check lay_out_proton_profile
+check test "$(readlink "$mac_profile")" = steamuser
+check test "$(cat "$profile/AppData/Local/Game/new.sav")" = fresh
+check test "$(cat "$profile/AppData/Local/Game/same.sav")" = same
+check test "$(cat "$profile/AppData/Local/Game/newer.sav")" = played
+check test "$(cat "$profile/AppData/Local/Game/older.sav")" = synced
+check test "$(cat "$mac_profile BACKUP/AppData/Local/Game/newer.sav")" = cloud
+check test "$(cat "$mac_profile BACKUP/AppData/Local/Game/older.sav")" = stale
+check test ! -e "$mac_profile BACKUP/AppData/Local/Game/new.sav"
+check test ! -e "$mac_profile BACKUP/AppData/Local/Game/same.sav"
+check test "$(cat "$case_root/mac-documents/private.txt")" = private
+check test ! -L "$profile/Documents"
+check test ! -e "$profile/Desktop/My Mac Desktop"
+check test ! -e "$mac_profile BACKUP/Documents"
+
+fixture
+mac_profile="$WINEPREFIX/drive_c/users/$mac_user"
+mkdir -p "$mac_profile/AppData/Local/Game"
+printf fresh > "$mac_profile/AppData/Local/Game/new.sav"
+check lay_out_proton_profile
+check test "$(readlink "$mac_profile")" = steamuser
+check test ! -e "$mac_profile BACKUP"
+check test "$(cat "$WINEPREFIX/drive_c/users/steamuser/AppData/Local/Game/new.sav")" = fresh
+
 fixture
 mkdir -p "$WINEPREFIX/drive_c/users/steamuser/Documents/Game"
 printf original > "$WINEPREFIX/drive_c/users/steamuser/Documents/Game/save"
@@ -224,6 +303,21 @@ fixture
 export WINEDLLOVERRIDES=leak WINEARCH=win32 WINEMSYNC=1 SteamAppId=123
 isolated=$(in_template_env "$WINEPREFIX" /usr/bin/env)
 check test "$(printf '%s\n' "$isolated" | grep -Ec '^(WINEDLLOVERRIDES|WINEARCH|WINEMSYNC|SteamAppId)=' || true)" = 0
+
+np_runtime=highball
+export DYLD_FALLBACK_FRAMEWORK_PATH="$CX_ROOT/frameworks"
+export DYLD_FALLBACK_LIBRARY_PATH="$CX_ROOT/frameworks:$CX_ROOT/frameworks/GStreamer.framework/Versions/1.0/lib"
+export GST_PLUGIN_PATH="$CX_ROOT/frameworks/GStreamer.framework/Versions/1.0/lib/gstreamer-1.0"
+# Inspect env's arguments: macOS strips DYLD variables when executing /usr/bin/env itself.
+isolated=$(
+  # shellcheck disable=SC2329 # in_template_env calls this test override indirectly.
+  env() { printf '%s\n' "$@"; }
+  in_template_env "$WINEPREFIX" /usr/bin/env
+)
+check test "$(printf '%s\n' "$isolated" | sed -n 's/^DYLD_FALLBACK_LIBRARY_PATH=//p')" = "$DYLD_FALLBACK_LIBRARY_PATH"
+check test "$(printf '%s\n' "$isolated" | sed -n 's/^GST_PLUGIN_PATH=//p')" = "$GST_PLUGIN_PATH"
+check test "$(printf '%s\n' "$isolated" | grep -Ec '^(WINEDLLOVERRIDES|WINEARCH|WINEMSYNC|SteamAppId)=' || true)" = 0
+np_runtime=crossover
 
 fixture
 prepare_prefix_directory

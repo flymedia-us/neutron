@@ -42,6 +42,13 @@ struct SteamInstallerTests {
 
         let appinfo = root.appending(path: "appinfo")
         try FileManager.default.copyItem(at: dylib, to: appinfo)
+
+        let highballEnv = root.appending(path: "highball-env")
+        try FileManager.default.copyItem(at: dylib, to: highballEnv)
+        try Data("{}".utf8).write(to: root.appending(path: "highball-db.json"))
+        let engines = root.appending(path: "highball-engines")
+        try FileManager.default.createDirectory(at: engines, withIntermediateDirectories: true)
+        for name in InstallPayload.highballEngineFiles { try Data("{}".utf8).write(to: engines.appending(path: name)) }
         try Data("#!/bin/sh\nexit 0\n".utf8).write(to: root.appending(path: "run"))
         try Data("100\n".utf8).write(to: root.appending(path: "build-time"))
 
@@ -68,6 +75,8 @@ struct SteamInstallerTests {
         var overlayShim: URL { support.appending(path: "overlay-shim.dylib") }
         var iconmaker: URL { support.appending(path: "iconmaker") }
         var appinfo: URL { support.appending(path: "appinfo") }
+        var highballEnv: URL { support.appending(path: "highball-env") }
+        var highballDB: URL { support.appending(path: "highball-db.json") }
         var deployedVersion: URL { support.appending(path: "dylib.version") }
         var backups: URL { support.appending(path: "backups") }
         var bridge: URL { support.appending(path: "bridge") }
@@ -104,7 +113,8 @@ struct SteamInstallerTests {
         stopped: Bool = false,
         running: Bool = false,
         recordBuild: Bool = true,
-        verifyRunner: (RunnerBuild, URL) throws -> Void = { _, _ in }
+        verifyRunner: (RunnerBuild, URL) throws -> Void = { _, _ in },
+        requirement: (URL) -> String? = SteamInstaller.designatedRequirement(of:)
     ) throws -> InstallOutcome {
         let outcome = try SteamInstaller.run(
             payload: fixture.payload,
@@ -116,6 +126,8 @@ struct SteamInstallerTests {
             overlayShim: fixture.overlayShim,
             iconmaker: fixture.iconmaker,
             appinfo: fixture.appinfo,
+            highballEnv: fixture.highballEnv,
+            highballDB: fixture.highballDB,
             deployedVersion: fixture.deployedVersion,
             backups: fixture.backups,
             compatTools: fixture.work.appending(path: "compatibilitytools.d"),
@@ -126,7 +138,8 @@ struct SteamInstallerTests {
             patchRunner: { _, _, _ in },
             stopClient: { _, onStopping in if stopped { onStopping() }; return stopped },
             register: { calls.register($0) },
-            resetInputAccess: { calls.resetInputAccess() }
+            resetInputAccess: { calls.resetInputAccess() },
+            requirement: requirement
         )
         if recordBuild {
             try SteamInstaller.finish(outcome, deployedVersion: fixture.deployedVersion, isCurrent: { _ in true })
@@ -148,12 +161,41 @@ struct SteamInstallerTests {
         #expect(outcome.backedUpPlist)
         #expect(!outcome.stoppedClient)
         #expect(calls.inputAccessResets == 1)
+    }
+
+    @Test("A re-sign that keeps Steam's designated requirement keeps its Accessibility grant")
+    func unchangedRequirementKeepsGrant() async throws {
+        let work = try scratchDirectory("install-same-requirement")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let fixture = try await self.fixture(into: work)
+        let calls = Calls()
+
+        _ = try install(fixture, calls: calls, requirement: { _ in
+            "identifier \"com.valvesoftware.steam\" and certificate leaf = H\"e5b107465037b7d8f597bf3acfa48ec7e1beaf3a\""
+        })
+
+        #expect(calls.inputAccessResets == 0)
+    }
+
+    @Test("A re-sign that changes the requirement, as an ad hoc signature does, resets the grant")
+    func changedRequirementResetsGrant() async throws {
+        let work = try scratchDirectory("install-new-requirement")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let fixture = try await self.fixture(into: work)
+        let calls = Calls()
+        let seen = Counter()
+
+        _ = try install(fixture, calls: calls, requirement: { _ in "cdhash H\"\(seen.next())\"" })
+
+        #expect(calls.inputAccessResets == 1)
 
         let files = FileManager.default
         #expect(files.fileExists(atPath: fixture.deployedDylib.path(percentEncoded: false)))
         #expect(files.fileExists(atPath: fixture.overlayShim.path(percentEncoded: false)))
         #expect(files.fileExists(atPath: fixture.iconmaker.path(percentEncoded: false)))
         #expect(files.fileExists(atPath: fixture.appinfo.path(percentEncoded: false)))
+        #expect(files.fileExists(atPath: fixture.highballEnv.path(percentEncoded: false)))
+        #expect(files.fileExists(atPath: fixture.highballDB.path(percentEncoded: false)))
         #expect(
             try String(contentsOf: fixture.deployedVersion, encoding: .utf8)
                 .trimmingCharacters(in: .whitespacesAndNewlines) == "9.9.9-test"
@@ -226,7 +268,7 @@ struct SteamInstallerTests {
         try Shell.check("/usr/bin/xattr", [
             "-wx", "com.apple.FinderInfo", "0000000000000000040000000000000000000000000000000000000000000000", app,
         ])
-        try Shell.check("/usr/bin/xattr", ["-w", "com.notproton.keep", "1", app])
+        try Shell.check("/usr/bin/xattr", ["-w", "us.flymedia.neutron.keep", "1", app])
         #expect(!(try Shell.run("/usr/bin/codesign", ["-f", "-s", "-", app])).succeeded)
 
         _ = try install(fixture)
@@ -236,7 +278,7 @@ struct SteamInstallerTests {
         let left = try Shell.run("/usr/bin/xattr", ["-lr", app]).stdout
         #expect(!left.contains("com.apple.FinderInfo"))
         #expect(!left.contains("com.apple.ResourceFork"))
-        #expect(left.contains("com.notproton.keep"))
+        #expect(left.contains("us.flymedia.neutron.keep"))
     }
 
     @Test("An insert belonging to something else stops the install and is left alone")
@@ -318,7 +360,7 @@ struct SteamInstallerTests {
 
         _ = try install(fixture)
 
-        let backup = fixture.backups.appending(path: "Info.plist.before-notproton")
+        let backup = fixture.backups.appending(path: "Info.plist.before-neutron")
         let saved = try #require(SteamBundle.readInfoPlist(at: backup))
         let environment = try #require(saved[SteamBundle.environmentKey] as? [String: Any])
         #expect(environment[SteamBundle.insertKey] == nil, "the backup already carries an insert")
@@ -439,6 +481,8 @@ struct SteamInstallerTests {
         #expect(files.fileExists(atPath: fixture.overlayShim.path(percentEncoded: false)))
         #expect(files.fileExists(atPath: fixture.iconmaker.path(percentEncoded: false)))
         #expect(files.fileExists(atPath: fixture.appinfo.path(percentEncoded: false)))
+        #expect(files.fileExists(atPath: fixture.highballEnv.path(percentEncoded: false)))
+        #expect(files.fileExists(atPath: fixture.highballDB.path(percentEncoded: false)))
         #expect(
             try files.contentsOfDirectory(atPath: fixture.signatures.path(percentEncoded: false))
                 .sorted() == ["1788400362.json", "1788652215.json"]
@@ -551,7 +595,7 @@ struct SteamInstallerTests {
 
         let error = try #require(throws: StepFailure.self) { try install(fixture, calls: calls, stopped: true) }
 
-        #expect(error.detail.contains("newer NotProton"))
+        #expect(error.detail.contains("newer Neutron"))
         #expect(try Data(contentsOf: fixture.deployedDylib) == before)
         #expect(try DeploymentContent.readBuild(at: record) == newer)
         #expect(calls.registrations.isEmpty)
@@ -607,7 +651,8 @@ struct SteamInstallerTests {
         let files = DeploymentContent.files(payload: fixture.payload, bridgePayload: bridge, app: fixture.app,
                                             bridge: fixture.bridge, signatures: fixture.signatures,
                                             fonts: fixture.fonts, overlayShim: fixture.overlayShim, iconmaker: fixture.iconmaker,
-                                            appinfo: fixture.appinfo, compatTools: work.appending(path: "compatibilitytools.d"),
+                                            appinfo: fixture.appinfo, highballEnv: fixture.highballEnv, highballDB: fixture.highballDB,
+                                            compatTools: work.appending(path: "compatibilitytools.d"),
                                             tools: tools, runners: runners)
         #expect(try files.allSatisfy { try $0.matches() })
     }
@@ -709,4 +754,10 @@ struct SteamInstallerTests {
         #expect(!FileManager.default.fileExists(atPath: DeploymentContent.record(beside: fixture.deployedVersion).path))
         #expect(!FileManager.default.fileExists(atPath: fixture.deployedVersion.path))
     }
+}
+
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func next() -> Int { lock.lock(); defer { lock.unlock() }; value += 1; return value }
 }
