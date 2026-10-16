@@ -161,16 +161,6 @@
         }
       }
     },
-    "%@ is already listed." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 已在列表中。"
-          }
-        }
-      }
-    },
     "%@ is left from a rebuild that did not finish and may hold the only copy of the saves. Move it somewhere safe, then try again." : {
       "localizations" : {
         "zh-Hans" : {
@@ -217,16 +207,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不支持构建版本 %@。支持的版本：%@。"
-          }
-        }
-      }
-    },
-    "%@ is not a valid copy of CrossOver." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 不是有效的 CrossOver 应用。"
           }
         }
       }
@@ -598,16 +578,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "接受并下载"
-          }
-        }
-      }
-    },
-    "Add" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加"
           }
         }
       }
@@ -1092,16 +1062,6 @@
         }
       }
     },
-    "Clone CrossOver" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "复制 CrossOver"
-          }
-        }
-      }
-    },
     "Close Steam before continuing." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1228,6 +1188,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "其他磁盘上的副本 %@"
+          }
+        }
+      }
+    },
+    "Copy Wine runtime" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制 Wine 运行时"
           }
         }
       }
@@ -2012,12 +1982,22 @@
         }
       }
     },
-    "It will replace the DLLs used by CrossOver with ones that match your compatibility tool." : {
+    "It can also repair a prefix when a previously working game stops launching." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "它会将 CrossOver 使用的 DLL 替换为与当前兼容工具匹配的版本。"
+            "value" : "它还可修复游戏之前可以运行、现在却无法启动时的容器问题。"
+          }
+        }
+      }
+    },
+    "It replaces runtime DLLs with ones that match your compatibility tool." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它会将运行时 DLL 替换为与当前兼容工具匹配的版本。"
           }
         }
       }
@@ -2255,12 +2235,12 @@
         }
       }
     },
-    "Neutron by Fly Media is a fork of NotProton by NotProtonNot (https://github.com/NotProtonNot/NotProton), released under GPLv3. It is not affiliated with or endorsed by NotProton, Valve, CodeWeavers or Highball. Highball integration is adapted from Proton-ish by MagnusPladsen (https://github.com/MagnusPladsen/Proton-ish). It uses Highball's HighballKit (GPLv3) and highball-db game data (CC0) by Gauthier Piarrette (https://github.com/gauthierpiarrette/highball)." : {
+    "Neutron by Fly Media is a fork of NotProton by NotProtonNot (https://github.com/NotProtonNot/NotProton), released under GPLv3. It is not affiliated with or endorsed by NotProton, Valve, Apple or Highball. Highball integration is adapted from Proton-ish by MagnusPladsen (https://github.com/MagnusPladsen/Proton-ish). It uses Highball's HighballKit (GPLv3) and highball-db game data (CC0) by Gauthier Piarrette (https://github.com/gauthierpiarrette/highball)." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Neutron 由 Fly Media 开发，基于 NotProtonNot 的 NotProton（https://github.com/NotProtonNot/NotProton）分叉，按 GPLv3 发布。它与 NotProton、Valve、CodeWeavers 或 Highball 无关联，也未获其认可。Highball 集成改编自 MagnusPladsen 的 Proton-ish（https://github.com/MagnusPladsen/Proton-ish）。本项目使用 Gauthier Piarrette 的 HighballKit（GPLv3）和 highball-db 游戏数据（CC0）（https://github.com/gauthierpiarrette/highball）。"
+            "value" : "Neutron 由 Fly Media 开发，基于 NotProtonNot 的 NotProton（https://github.com/NotProtonNot/NotProton）分叉，按 GPLv3 发布。它与 NotProton、Valve、Apple 或 Highball 无关联，也未获其认可。Highball 集成改编自 MagnusPladsen 的 Proton-ish（https://github.com/MagnusPladsen/Proton-ish）。本项目使用 Gauthier Piarrette 的 HighballKit（GPLv3）和 highball-db 游戏数据（CC0）（https://github.com/gauthierpiarrette/highball）。"
           }
         }
       }
@@ -2481,16 +2461,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已不再受支持"
-          }
-        }
-      }
-    },
-    "No supported copy of CrossOver found." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未找到受支持的 CrossOver 应用。"
           }
         }
       }
@@ -3275,16 +3245,6 @@
         }
       }
     },
-    "Select a copy of CrossOver." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请选择一份 CrossOver 应用。"
-          }
-        }
-      }
-    },
     "Select your copy of Steam." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3758,12 +3718,18 @@
         }
       }
     },
-    "The %@ ntdll at %@ hashes %@ and build %@ expects %@. It is already patched, or from another CrossOver build." : {
+    "The %@ ntdll at %@ hashes %@ and build %@ expects %@. It is already patched, or from another Wine build." : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The %1$@ ntdll at %2$@ hashes %3$@ and build %4$@ expects %5$@. It is already patched, or from another Wine build."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%2$@ 处的 %1$@ ntdll 的哈希值为 %3$@，但构建版本 %4$@ 预期为 %5$@。该文件可能已修补，或来自其他 CrossOver 版本。"
+            "value" : "%2$@ 处的 %1$@ ntdll 的哈希值为 %3$@，但构建版本 %4$@ 预期为 %5$@。该文件可能已修补，或来自其他 Wine 版本。"
           }
         }
       }
@@ -3904,16 +3870,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制到 %@ 的 Wine 加载器与构建版本 %@ 不匹配。预期为 %@，实际为 %@。"
-          }
-        }
-      }
-    },
-    "The compatibility tool was not set up because CrossOver is not activated." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CrossOver 尚未激活，因此未能设置兼容工具。"
           }
         }
       }
@@ -4081,16 +4037,6 @@
         }
       }
     },
-    "This can also fix issues where a game previously started/worked and does not work now, even if you did not switch CrossOver types." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "即使没有切换 CrossOver 类型，也可能修复游戏之前能运行、现在却无法运行的问题。"
-          }
-        }
-      }
-    },
     "This copy of Neutron cannot repair Steam. Please reinstall Neutron." : {
       "localizations" : {
         "zh-Hans" : {
@@ -4101,12 +4047,12 @@
         }
       }
     },
-    "This tool is intended to repair a prefix after switching between Rosetta/FEX CrossOver." : {
+    "This tool repairs a prefix after changing Wine runtimes or processor architectures." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此工具用于修复在 Rosetta 与 FEX 版 CrossOver 之间切换后的游戏容器。"
+            "value" : "此工具用于修复在更换 Wine 运行时或处理器架构后的游戏容器。"
           }
         }
       }
@@ -4271,6 +4217,16 @@
         }
       }
     },
+    "Verify runtime access" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证运行时访问权限"
+          }
+        }
+      }
+    },
     "Verifying" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4387,12 +4343,12 @@
         }
       }
     },
-    "another version of CrossOver" : {
+    "another Wine runtime" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "其他版本的 CrossOver"
+            "value" : "其他 Wine 运行时"
           }
         }
       }

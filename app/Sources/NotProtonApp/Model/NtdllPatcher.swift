@@ -1,4 +1,4 @@
-// Patches CrossOver's ntdll.dll so that lsteamclient is loaded.
+// Patches the pinned Wine ntdll.dll so that lsteamclient is loaded.
 
 import Foundation
 
@@ -696,7 +696,7 @@ enum NtdllPatcher {
         guard inputHash == expectedInput else {
             throw StepFailure(
                 step: step,
-                detail: String(localized: "The \(patch.arch.rawValue) ntdll at \(source.path(percentEncoded: false)) hashes \(inputHash.prefix(16)) and build \(build.bundleVersion) expects \(expectedInput.prefix(16)). It is already patched, or from another CrossOver build.")
+                detail: String(localized: "The \(patch.arch.rawValue) ntdll at \(source.path(percentEncoded: false)) hashes \(inputHash.prefix(16)) and build \(build.bundleVersion) expects \(expectedInput.prefix(16)). It is already patched, or from another Wine build.")
             )
         }
 

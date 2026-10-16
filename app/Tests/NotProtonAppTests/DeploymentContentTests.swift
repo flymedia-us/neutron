@@ -146,7 +146,7 @@ struct DeploymentContentTests {
                                    iconmakerPresent: true, appinfoPresent: true, highballEnvPresent: true, highballDBPresent: true, signatureDatabase: "fixture",
                                    legacyCompatPresent: 0, legacyCompatExpected: 0, manifestProblem: nil)
         status.snapshot = StatusSnapshot(steam: .notInstalled, steamRunning: false, updateBlocked: false,
-                                         crossOver: [], runner: .none, payload: payload,
+                                         runner: .none, payload: payload,
                                          installContent: .newerInstalled)
         #expect(!status.canInstall)
         status.snapshot?.installContent = .unavailable("invalid record")
@@ -163,7 +163,7 @@ struct DeploymentContentTests {
                                    iconmakerPresent: true, appinfoPresent: true, highballEnvPresent: true, highballDBPresent: true, signatureDatabase: "fixture",
                                    legacyCompatPresent: 0, legacyCompatExpected: 0, manifestProblem: nil)
         status.snapshot = StatusSnapshot(steam: .notInstalled, steamRunning: false, updateBlocked: false,
-                                         crossOver: [], runner: .none, payload: payload,
+                                         runner: .none, payload: payload,
                                          installContent: .newerInstalled)
         status.requestBuildRemoval("crossover-26.0")
         #expect(status.pendingRemoval == nil)

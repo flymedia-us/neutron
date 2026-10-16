@@ -1,11 +1,11 @@
-// Clones CrossOver's Wine runtime into ~/Library/Application Support/neutron/runners
+// Copies the pinned Wine runtime into ~/Library/Application Support/neutron/runners
 
 import Darwin
 import Foundation
 
 enum RunnerInstaller {
 
-    static let step = String(localized: "Clone CrossOver")
+    static let step = String(localized: "Copy Wine runtime")
 
     static func clone(
         from install: CrossOverInstall,

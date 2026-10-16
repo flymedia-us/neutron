@@ -32,18 +32,6 @@ enum AppLog {
             "state installContent=\(snapshot.installContent)",
         ]
 
-        if snapshot.crossOver.isEmpty {
-            lines.append("state crossOver=none found")
-        }
-        for install in snapshot.crossOver {
-            lines.append(
-                "state crossOver \(install.name) version=\(install.releaseVersion ?? "unreadable") "
-                    + "support=\(describe(install.support))"
-                    + (install.isManual ? " chosen" : "")
-                    + " at=\(install.bundle.path(percentEncoded: false))"
-            )
-        }
-
         let payload = snapshot.payload
         lines.append(
             "state payload staged=\(payload.present)/\(payload.expected) "
@@ -81,14 +69,6 @@ enum AppLog {
         case .ready(let builds): "ready \(builds.joined(separator: ", "))"
         case .unpatched(_, let problems):
             "unpatched: \(problems.joined(separator: ", "))"
-        }
-    }
-
-    private static func describe(_ support: CrossOverSupport) -> String {
-        switch support {
-        case .supported(let build): "supported \(build.id)"
-        case .unsupportedBuild(let version): "unsupported build \(version)"
-        case .unreadable: "unreadable"
         }
     }
 

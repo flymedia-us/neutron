@@ -260,13 +260,7 @@ struct StatusView: View {
     }
 
     private func statusForm(_ snapshot: StatusSnapshot) -> some View {
-        ScrollViewReader { proxy in
-            form(snapshot)
-                .onChange(of: status.highlightedRow) { _, row in
-                    guard let row else { return }
-                    withAnimation { proxy.scrollTo(row, anchor: .center) }
-                }
-        }
+        form(snapshot)
     }
 
     private func form(_ snapshot: StatusSnapshot) -> some View {

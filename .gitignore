@@ -23,3 +23,12 @@ DerivedData/
 
 app/Sources/NotProtonApp/Resources/payload/
 __pycache__/
+
+# Local signing and notarization material
+*.p12
+*.pfx
+*.keychain
+*.keychain-db
+AuthKey_*.p8
+.env
+.env.local

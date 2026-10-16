@@ -39,7 +39,7 @@ static bool hook_CCompatManager_BIsEnabled(void *self, uint32_t appid) {
         return false;
     }
     np_compat_force_enable(self);
-    np_compat_register_crossover(self);
+    np_compat_register_tools(self);
     if (np_compat_apply_default_tool(self))
         np_compatsvc_state_changed();
     return orig(self, appid);
@@ -63,7 +63,7 @@ static void *orig_FindToolForTargetApp = NULL;
 typedef void *(*fn_FindToolForTargetApp)(void *self, uint32_t appid);
 
 // An unmapped windows-only app resolves to no tool ("Install on Windows").
-// Those are defaulted to CrossOver for quality UX.
+// Those are defaulted to Wine compatibility for quality UX.
 static void *hook_FindToolForTargetApp(void *self, uint32_t appid) {
     fn_FindToolForTargetApp orig = (fn_FindToolForTargetApp)orig_FindToolForTargetApp;
     if (!orig) {
@@ -84,11 +84,11 @@ static void *hook_FindToolForTargetApp(void *self, uint32_t appid) {
     if (!np_compat_would_force(self, appid))
         return NULL;
 
-    void *crossover = np_compat_registered_tool(self);
-    if (crossover)
-        NP_DBG("hook_FindToolForTargetApp: appID %u is windows-only, defaulting to CrossOver tool",
+    void *fallback = np_compat_registered_tool(self);
+    if (fallback)
+        NP_DBG("hook_FindToolForTargetApp: appID %u is windows-only, defaulting to Wine compatibility tool",
                appid);
-    return crossover;
+    return fallback;
 }
 
 static void *orig_InternalSpecifyCompatTool = NULL;
@@ -114,7 +114,7 @@ static uint64_t hook_InternalSpecifyCompatTool(void *self, uint64_t appid,
     return result;
 }
 
-// The trampoline is the client's own resolution without the CrossOver default.
+// The trampoline is the client's own resolution without the Wine compatibility default.
 void np_hooks_compat_publish_originals(void) {
     np_compat_set_chosen_tool_fn((uintptr_t)orig_FindToolForTargetApp);
 }
@@ -140,7 +140,7 @@ static void instrument_oslist_override_gate(void *address, void *ctx_) {
 #define TOOL_DEPENDENCY_OFF   0x20
 
 // Proton targets linux with no macOS depot, so the depot lookup fails. Rewriting
-// the tool to appid zero points the launch builder at the local CrossOver
+// the tool to appid zero points the launch builder at the local Wine compatibility
 // directory.
 static void instrument_resolver_local_redirect(void *address, void *ctx_) {
     (void)address;
@@ -164,7 +164,7 @@ static void instrument_resolver_local_redirect(void *address, void *ctx_) {
     *(const char **)(tool + np_compat_tool_off(COMPAT_TOOL_INSTALL_OFF)) = tool_dir;
     *(const char **)(tool + TOOL_COMMANDLINE_OFF) = np_compat_tool_commandline();
 
-    NP_LOG("instrument_resolver_local_redirect: tool %u routed to local CrossOver tool at %s",
+    NP_LOG("instrument_resolver_local_redirect: tool %u routed to local Wine compatibility tool at %s",
            tool_appid, tool_dir);
 }
 

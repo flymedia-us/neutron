@@ -65,17 +65,17 @@ void np_compat_force_enable(void *compat_mgr);
 void     np_compat_set_valid_platforms_fn(uintptr_t get_valid_platforms);
 uint32_t np_compat_valid_platforms(void *compat_mgr, uint32_t appid);
 
-// The tool an app will run under: user mapping if present, CrossOver default
+// The tool an app will run under: user mapping if present, Wine default
 // otherwise. Goes through the same function the launch path uses.
 void  np_compat_set_find_tool_fn(uintptr_t find_tool_for_target_app);
 void *np_compat_tool_for_app(void *compat_mgr, uint32_t appid);
 
-// The tool from the client's own mapping alone, without the CrossOver default.
+// The tool from the client's own mapping alone, without the Wine default.
 // The properties page needs the two apart to show absence vs. choice.
 void  np_compat_set_chosen_tool_fn(uintptr_t find_tool_for_target_app);
 void *np_compat_chosen_tool(void *compat_mgr, uint32_t appid);
 
-// Whether an app gets the CrossOver default: windows-only with no macOS.
+// Whether an app gets the Wine default: windows-only with no macOS.
 //
 // Deliberately blind to whether a macOS build can actually run. A 32-bit macOS
 // build cannot run on a current system, but moving it onto a tool means fetching
@@ -129,7 +129,7 @@ void np_compat_set_register_fn(uintptr_t yld_register_tool);
 // Registers every tool in the app's list into the given manager once. The local
 // compatibilitytools.d scan uses a different instance than the dropdown reads
 // and does not run on every launch, so this registers into the right one.
-void np_compat_register_crossover(void *compat_mgr);
+void np_compat_register_tools(void *compat_mgr);
 
 // The manager the properties page enumerates, or NULL before the first compat
 // query. Captured at registration, not construction (the compatibilitytools.d

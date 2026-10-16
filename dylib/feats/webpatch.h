@@ -13,7 +13,7 @@ void np_webpatch_set_fallback_tool(const char *name);
 
 #define NP_WEBPATCH_FEX_TOOLS_MAX 16
 
-// Sets the tools this thread's CrossOver options panel treats as FEX. Names the
+// Sets the tools this thread's Wine options panel treats as FEX. Names the
 // fallback would drop are skipped, as is anything past NP_WEBPATCH_FEX_TOOLS_MAX.
 void np_webpatch_set_fex_tools(const char *const *names, size_t count);
 

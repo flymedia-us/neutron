@@ -4,15 +4,18 @@ on:
     - cron: "17 6 * * *"
   workflow_dispatch:
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-  actions: write
+  contents: read
 concurrency:
   group: upstream-sync
   cancel-in-progress: false
 jobs:
   merge:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
     name: Review upstream changes
     runs-on: ubuntu-latest
     strategy:
@@ -20,7 +23,7 @@ jobs:
       matrix:
         source: [notproton]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           token: ${{ secrets.SYNC_TOKEN || github.token }}
@@ -47,16 +50,20 @@ jobs:
           gh workflow run lint.yml --ref "$BRANCH"
           gh workflow run app.yml --ref "$BRANCH"
   highball:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
     needs: merge
     name: Highball library and game database
-    runs-on: xcode-27
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           token: ${{ secrets.SYNC_TOKEN || github.token }}
-      - name: Select Xcode
-        run: sh scripts/select-xcode.sh
       - name: Prepare Highball updates
         id: sync
         env:
@@ -72,11 +79,15 @@ jobs:
           gh workflow run lint.yml --ref "$BRANCH"
           gh workflow run app.yml --ref "$BRANCH"
   engines:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      issues: write
     needs: merge
     name: Detect new engine builds
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Report new builds for validation
         env:
           GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
