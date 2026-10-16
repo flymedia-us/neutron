@@ -30,3 +30,25 @@ git_identity() {
 footer() {
   printf '\n---\nOpened by the upstream-sync workflow. It never bumps `dylib/version.h`, so merging this does not publish a release.\n'
 }
+
+# Organization policy can forbid bot-created PRs. Keep the prepared branch reviewable
+# without changing policy or granting credentials broader access.
+open_review() (
+  branch=$1
+  label=$2
+  title=$3
+  body=$4
+  review_tmp=$(mktemp -d)
+  trap 'rm -rf "$review_tmp"' EXIT
+  printf '%s\n' "$body" > "$review_tmp/body.md"
+  if "$GH" pr create -R "$REPO" --base main --head "$branch" \
+      --title "$title" --label upstream-sync --label "$label" --body-file "$review_tmp/body.md"; then
+    sync_log "opened a PR for $branch"
+  else
+    printf 'The update branch is ready, but GitHub refused automatic PR creation. Repository or organization policy may block it. No permission changes were made.\n\nReview and open a PR: https://github.com/%s/compare/main...%s?expand=1\n\n%s\n' \
+      "$REPO" "$branch" "$body" > "$review_tmp/issue.md"
+    "$GH" issue create -R "$REPO" --title "$title: manual PR needed" \
+      --label upstream-sync --label "$label" --body-file "$review_tmp/issue.md"
+    sync_log "PR creation unavailable; opened a review issue for $branch"
+  fi
+)

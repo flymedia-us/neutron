@@ -36,7 +36,7 @@ git fetch --all
 
 The **upstream sync** workflow runs daily and on demand. It proposes merges directly from NotProton as pull requests, reports conflicts as issues, refreshes pinned HighballKit/highball-db, and reports newer engine builds that need hash/detour validation. It never merges or releases automatically. Brand, filesystem and runtime checks must pass before incorporating upstream changes.
 
-It uses the repository's `GITHUB_TOKEN`; enable GitHub Actions and **Allow GitHub Actions to create and approve pull requests** in repository settings. A `SYNC_TOKEN` is optional for organizations with different bot policies. Checks for token-created PRs are explicitly dispatched so GitHub's event suppression does not silently skip CI. New engine builds require manual verification before use.
+It uses the repository's `GITHUB_TOKEN`. When repository and organization policy permit bot-created PRs, it opens PRs directly. If GitHub refuses PR creation, it keeps the prepared branch and opens an issue linking its comparison page for a manual PR; CI still runs on that branch. No organization policy changes are needed for this fallback. To permit direct PR creation, enable **Allow GitHub Actions to create and approve pull requests** in repository settings (subject to organization policy). A `SYNC_TOKEN` is optional for organizations with different bot policies. Checks for token-created PRs are explicitly dispatched so GitHub's event suppression does not silently skip CI. New engine builds require manual verification before use.
 
 ## Build and test
 

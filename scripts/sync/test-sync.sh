@@ -22,7 +22,15 @@ case "$1 $2" in
   "pr list") cat "$STUB_DIR/prs" 2>/dev/null ;;
   "release list") cat "$STUB_DIR/releases" 2>/dev/null ;;
   "api repos/gauthierpiarrette/highball-db/commits/main") cat "$STUB_DIR/dbhead" 2>/dev/null ;;
-  "pr create"|"issue create") echo "https://example.invalid/1" ;;
+  "pr create")
+    if [ -f "$STUB_DIR/block-pr" ]; then echo 'Organization policy blocks PR creation' >&2; exit 1; fi
+    echo "https://example.invalid/1" ;;
+  "issue create")
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = --body-file ]; then cat "$2" >> "$STUB_LOG"; break; fi
+      shift
+    done
+    echo "https://example.invalid/1" ;;
 esac
 STUB
 chmod +x "$work/bin/gh"
@@ -70,6 +78,21 @@ is "the merge commit is the bot's" "Neutron sync" "$(git -C "$work/origin.git" l
 run notproton.sh
 hasnt "a second run opens no second PR" "pr create" "$STUB_LOG"
 has "and says why" "already in a PR or issue" "$work/out"
+
+echo "== NotProton: PR policy leaves a review branch and issue =="
+checkout
+sha=$(upstream_commit fix.c 'int fixed;' "Fix runtime")
+: > "$STUB_DIR/block-pr"
+export GITHUB_OUTPUT="$work/output"
+run notproton.sh
+has "policy block opens an actionable issue" "manual PR needed" "$STUB_LOG"
+has "issue links the prepared comparison" "compare/main...sync/notproton-$sha?expand=1" "$STUB_LOG"
+has "CI still receives the prepared branch" "branch=sync/notproton-$sha" "$GITHUB_OUTPUT"
+hasnt "fallback exits successfully" "exit [1-9]" "$work/out"
+run notproton.sh
+hasnt "policy block is not reported twice" "issue create" "$STUB_LOG"
+rm -f "$STUB_DIR/block-pr"
+unset GITHUB_OUTPUT
 
 echo "== NotProton: a conflict becomes an issue =="
 checkout
@@ -136,6 +159,16 @@ printf 'v0.10.16\n' > "$STUB_DIR/releases"; printf 'bbbbbbb2222\n' > "$STUB_DIR/
 runhb
 has "both newer go in one PR" "--head sync/highball-0.10.16-db-bbbbbbb " "$STUB_LOG"
 is "the snapshot is refreshed" "1" "$(git -C "$work/hb-origin.git" show sync/highball-0.10.16-db-bbbbbbb:third_party/highball-db/highball-db.json | grep -c bbbbbbb2222)"
+
+echo "== Highball: blocked PR remains reviewable =="
+hb 0.10.15 aaaaaaa1111
+printf 'v0.10.16\n' > "$STUB_DIR/releases"; printf 'aaaaaaa1111\n' > "$STUB_DIR/dbhead"
+: > "$STUB_DIR/block-pr"
+runhb
+has "Highball policy block opens a review issue" "manual PR needed" "$STUB_LOG"
+has "Highball issue includes comparison link" "compare/main...sync/highball-0.10.16?expand=1" "$STUB_LOG"
+hasnt "Highball fallback exits successfully" "exit [1-9]" "$work/out"
+rm -f "$STUB_DIR/block-pr"
 
 echo "== Highball engines =="
 eng() {

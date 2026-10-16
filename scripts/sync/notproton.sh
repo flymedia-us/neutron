@@ -29,11 +29,10 @@ git_identity
 git checkout -q -B "$branch" origin/main
 if git merge --no-ff --no-edit -m "Merge NotProton $sha" upstream/main >/dev/null 2>&1; then
   git push -q -u origin "$branch"
-  "$GH" pr create -R "$REPO" --base main --head "$branch" \
-    --title "sync: merge NotProton $sha" --label upstream-sync --label notproton \
-    --body "$(printf '## What\nMerges upstream NotProton `%s` into main. Clean merge.\n\n## Upstream commits\n```\n%s\n```\n\n## Before merging\n- CI must be green, including `brandcheck`.\n- Add a dated line under "Changes from upstream" in README.md if the change is user-visible.\n%s' "$sha" "$commits" "$(footer)")"
+  open_review "$branch" notproton "sync: merge NotProton $sha" \
+    "$(printf '## What\nMerges upstream NotProton `%s` into main. Clean merge.\n\n## Upstream commits\n```\n%s\n```\n\n## Before merging\n- CI must be green, including `brandcheck`.\n- Add a dated line under "Changes from upstream" in README.md if the change is user-visible.\n%s' "$sha" "$commits" "$(footer)")"
   [ -z "${GITHUB_OUTPUT:-}" ] || printf 'branch=%s\n' "$branch" >> "$GITHUB_OUTPUT"
-  sync_log "notproton: opened a PR for $sha"
+  sync_log "notproton: prepared $sha for review"
 else
   conflicts=$(git diff --name-only --diff-filter=U)
   git merge --abort

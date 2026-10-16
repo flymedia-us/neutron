@@ -18,6 +18,6 @@ known=$(tr -d ' \n' < scripts/sync/known-highball-engine)
       continue
     fi
     "$GH" issue create -R "$REPO" --title "New Highball engine $tag" --label upstream-sync --label highball-engine \
-      --body "$(printf 'Highball published a new engine build: https://github.com/gauthierpiarrette/highball-engine/releases/tag/%s\n\nSupporting it in Neutron is manual work:\n\n- [ ] Find the engine manifest id in Highball'"'"'s `spike/engines/` that uses this build\n- [ ] Build the detour payloads and record the clean/patched ntdll and loader hashes (see `docs/superpowers/plans/2026-10-14-m2a-highball-runner.md`, Task 5)\n- [ ] Add the `RunnerBuild` to `SupportedRunner.swift` and the id to `HIGHBALL_ENGINES` in the Makefile\n- [ ] Launch a game through it; update README and `scripts/sync/known-highball-engine`\n%s' "$tag" "$(footer)")"
+      --body "$(printf 'Highball published a new engine build: https://github.com/gauthierpiarrette/highball-engine/releases/tag/%s\n\nSupporting it in Neutron is manual work:\n\n- [ ] Find the engine manifest id in Highball'"'"'s `spike/engines/` that uses this build\n- [ ] Build the detour payloads and record the clean/patched ntdll and loader hashes; keep existing engine records unchanged until verification passes\n- [ ] Add the `RunnerBuild` to `SupportedRunner.swift` and the id to `HIGHBALL_ENGINES` in the Makefile\n- [ ] Launch a game through it; update README and `scripts/sync/known-highball-engine`\n%s' "$tag" "$(footer)")"
     sync_log "engine: opened an issue for $tag"
   done
