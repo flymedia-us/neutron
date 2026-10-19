@@ -21,7 +21,7 @@ let package = Package(
     platforms: [.macOS("15.0")],
     dependencies: [
         // Highball's own launch-environment code (GPL-3.0). upstream-sync bumps this pin.
-        .package(url: "https://github.com/gauthierpiarrette/highball", exact: "0.10.15"),
+        .package(url: "https://github.com/gauthierpiarrette/highball", exact: "0.10.21"),
     ],
     targets: [
         .executableTarget(
