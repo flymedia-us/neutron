@@ -17,7 +17,9 @@ external-library and display changes were retained.
   switching, display controls, controllers, launch arguments, locale selection,
   migration and engine capability limits.
 - Overlay tests: eight passed across ARM64 and x86_64, including the upstream
-  pipeline ownership and lifetime fixes.
+  pipeline ownership and lifetime fixes. GPU tests check Metal 4 feature support
+  before running, so virtual Macs without it explicitly skip those tests;
+  delivery and ownership checks still run on both architectures in CI.
 - A clean rebuild of the pinned Wine/Steam bridge passed for the i386/x86_64 Windows DLLs, both Unix architectures, and the Steam helper. The final ZIP includes these fresh binaries.
 - The app built with embedded Sparkle and passed strict, deep ad hoc signature
   verification. All 13 Mach-O binaries met the macOS 15 deployment target.

@@ -46,6 +46,9 @@ int main(void)
 
 	SEL new_mtl4 = sel_registerName("newMTL4CommandQueue");
 	SKIP_IF(![device respondsToSelector:new_mtl4], "the Metal 4 interfaces are not on this system");
+	if (@available(macOS 26.0, *)) {
+		SKIP_IF(![device supportsFamily:MTLGPUFamilyMetal4], "this GPU does not support Metal 4");
+	}
 
 	id<MTLCommandQueue> queue = [device newCommandQueue];
 	CHECK(queue != nil, "newCommandQueue came back nil");
