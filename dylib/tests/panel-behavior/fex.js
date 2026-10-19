@@ -39,8 +39,10 @@ for (const form of Object.keys(FORMS)) {
     r = nodes('CX_GRAPHICS_BACKEND=dxmt');
     t.ok(toggles(r).includes('DLSS') && r.some(x => x.type === 'Section' &&
          x.props.label.startsWith('MetalFX')), 'dxmt keeps its DLSS row and MetalFX');
-    for (const l of ['Metal HUD', 'MSync', 'High Resolution'])
+    for (const l of ['Metal HUD', 'MSync'])
       t.ok(toggles(r).includes(l), `${l} stays`);
+
+    t.ok(r.some(x => x.type === 'Section' && x.props.label === 'Display pixels'), 'display controls stay available');
 
     written.length = 0;
     nodes('CX_GRAPHICS_BACKEND=d3dmetal D3DM_ENABLE_METALFX=1').find(x => x.type === 'Dropdown')

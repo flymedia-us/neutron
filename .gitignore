@@ -32,3 +32,7 @@ __pycache__/
 AuthKey_*.p8
 .env
 .env.local
+
+# Apple API and update-signing private keys
+*.p8
+*.key

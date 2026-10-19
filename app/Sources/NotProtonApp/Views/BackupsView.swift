@@ -20,7 +20,7 @@ struct BackupsView: View {
                 table
             }
         }
-        .navigationTitle("Prefix Backups")
+        .navigationTitle("Backups")
         .navigationSubtitle(summary)
         .safeAreaInset(edge: .bottom) {
             if let failed = model.report {
@@ -125,7 +125,7 @@ struct BackupsView: View {
     }
 
     private var gameWidth: CGFloat {
-        TextWidth.widest(model.backups.map(\.title)) ?? 240
+        min(TextWidth.widest(model.backups.map(\.title)) ?? 240, TextWidth.maxTitle + TextWidth.cellPadding)
     }
 
     private var libraryWidth: CGFloat {

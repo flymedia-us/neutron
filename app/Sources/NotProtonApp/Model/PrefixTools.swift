@@ -278,9 +278,10 @@ enum PrefixTools {
         if let refused = verbs.first(where: { $0 == "annihilate" || $0.hasPrefix("prefix=") || $0.hasPrefix("-") }) {
             throw StepFailure(step: step, detail: String(localized: "Neutron does not run \(refused) with Winetricks."))
         }
-        guard !PrefixStore.isInUse(prefix) else {
+        guard let claim = PrefixStore.claim(prefix) else {
             throw StepFailure(step: step, detail: String(localized: "\(prefix.title) is running. Quit the game first."))
         }
+        defer { claim.release() }
         let loader = try readyLoader(step: step, prefix: prefix, runner: runner, flavor: flavor)
         let wrapper = script.deletingLastPathComponent().appending(path: "notproton-wine")
         do {
@@ -355,12 +356,13 @@ enum PrefixTools {
     }
 
     static func delete(_ prefix: WinePrefix) throws {
-        guard !PrefixStore.isInUse(prefix) else {
+        guard let claim = PrefixStore.claim(prefix) else {
             throw StepFailure(
                 step: String(localized: "Delete prefix"),
                 detail: String(localized: "\(prefix.title) is running. Quit the game first.")
             )
         }
+        defer { claim.release() }
         try WriteRefused.catching(prefix.root) {
             try FileManager.default.removeItem(at: prefix.root)
         }

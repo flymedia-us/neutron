@@ -26,6 +26,7 @@ struct StatusSnapshot: Sendable {
     var highball: [HighballEngine] = []
     var defaultToolRequest: String?
     var steamDefaultTool: String?
+    var rosettaInstalled = true
 
     static func capture(bundledVersion: String) -> StatusSnapshot {
         let runner = RunnerStore.state()
@@ -43,7 +44,8 @@ struct StatusSnapshot: Sendable {
             installContent: DeploymentContent.current(version: bundledVersion),
             highball: HighballSource.discover(),
             defaultToolRequest: DefaultTool.request(),
-            steamDefaultTool: DefaultTool.steamDefault()
+            steamDefaultTool: DefaultTool.steamDefault(),
+            rosettaInstalled: (try? Shell.run("/usr/bin/arch", ["-x86_64", "/usr/bin/true"]).status) == 0
         )
     }
 }
@@ -64,7 +66,9 @@ final class SystemStatus {
     // if run on an actual user's machine.
     @ObservationIgnored var refreshAfterRun: @MainActor (SystemStatus) async -> Void = { await $0.refresh() }
 
-    var isBusy: Bool { activity != nil || runInFlight }
+    private(set) var isSettingUp = false
+    var setupRequested = false
+    var isBusy: Bool { activity != nil || runInFlight || isSettingUp }
     var isIdle: Bool { !isBusy && !isRefreshing }
     var canInstall: Bool { isIdle && snapshot?.installContent.blocksInstallation != true }
 
@@ -138,6 +142,16 @@ final class SystemStatus {
 
     func setUpNeutron(acceptD3DMetal: Bool) async {
         guard canInstall else { return }
+        isSettingUp = true
+        defer { isSettingUp = false }
+        // Check the actual prerequisite again before touching Steam.
+        let rosetta = await Task.detached(priority: .utility) {
+            (try? Shell.run("/usr/bin/arch", ["-x86_64", "/usr/bin/true"]).status) == 0
+        }.value
+        guard rosetta else {
+            setFailure(String(localized: "Install Rosetta to run Windows games, then try setup again."))
+            return
+        }
         await installIntoSteam()
         guard failure == nil else { return }
         if let engine = HighballSource.discover().first(where: \.isUsable) {
@@ -148,6 +162,23 @@ final class SystemStatus {
             await setUpHighball(engine)
         } else {
             await downloadHighballEngine(acceptD3DMetal: acceptD3DMetal)
+        }
+        guard failure == nil else { return }
+        await perform(from: String(localized: "Finishing setup")) { _ in
+            // Guided setup explicitly promises a Windows-game default. Unlike automatic
+            // adoption, this must work before patched Steam has ever been opened.
+            try DefaultTool.configureGuidedDefault(installed: RunnerStore.installedBuilds())
+            return String(localized: "Setup complete. Open Steam and choose a Windows game to play.")
+        }
+    }
+
+    func openSteam() {
+        guard isIdle, snapshot?.readyToPlay == true else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        NSWorkspace.shared.openApplication(at: SupportPaths.Steam.app, configuration: configuration) { _, error in
+            if let error {
+                Task { @MainActor in self.setFailure(error) }
+            }
         }
     }
 
@@ -207,26 +238,24 @@ final class SystemStatus {
             alert.addButton(withTitle: String(localized: "Cancel"))
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
-        let lock: DeploymentContent.InstallationLock
         do {
-            lock = try DeploymentContent.acquireInstallationLock()
+            let lock = try DeploymentContent.acquireInstallationLock()
+            defer { lock.release() }
+            if let refusal = Self.steamChoiceRefusal(picked, current: current) {
+                setFailure(refusal)
+                AppLog.note("steam choice refused: \(picked.path(percentEncoded: false))")
+                return
+            }
+
+            if same(picked, SupportPaths.Steam.defaultApp) {
+                UserDefaults.standard.removeObject(forKey: SupportPaths.Steam.appPathKey)
+            } else {
+                UserDefaults.standard.set(picked.path(percentEncoded: false), forKey: SupportPaths.Steam.appPathKey)
+            }
         } catch {
             setFailure(error)
             return
         }
-        if let refusal = Self.steamChoiceRefusal(picked, current: current) {
-            lock.release()
-            setFailure(refusal)
-            AppLog.note("steam choice refused: \(picked.path(percentEncoded: false))")
-            return
-        }
-
-        if same(picked, SupportPaths.Steam.defaultApp) {
-            UserDefaults.standard.removeObject(forKey: SupportPaths.Steam.appPathKey)
-        } else {
-            UserDefaults.standard.set(picked.path(percentEncoded: false), forKey: SupportPaths.Steam.appPathKey)
-        }
-        lock.release()
         AppLog.note("steam chosen: \(picked.path(percentEncoded: false))")
         await refresh()
     }
@@ -499,6 +528,7 @@ final class SystemStatus {
     }
 
     func refresh() async {
+        guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
 
@@ -518,16 +548,22 @@ final class SystemStatus {
 
     func refreshRunnerStorage(
         runners: URL = SupportPaths.runners, libraries: [SteamLibrary] = PrefixStore.libraries(),
-        cleanTemplates: Bool = true
+        cleanTemplates: Bool = true,
+        acquireInstallationLock: @escaping @Sendable () throws -> DeploymentContent.InstallationLock = {
+            try DeploymentContent.acquireInstallationLock()
+        }
     ) async {
         let known = runnerSizes
         let measured = await Task.detached(priority: .utility) {
-            if cleanTemplates, let lock = try? DeploymentContent.acquireInstallationLock() {
+            let failures: [StepFailure]
+            if cleanTemplates, let lock = try? acquireInstallationLock() {
+                defer { lock.release() }
                 RunnerInstaller.removeLeftoverRemovals(runners: runners)
-                lock.release()
+                failures = RunnerInstaller.removeStalePrefixTemplates(
+                    runners: runners, libraries: libraries, reportBusy: false)
+            } else {
+                failures = []
             }
-            let failures = cleanTemplates
-                ? RunnerInstaller.removeStalePrefixTemplates(runners: runners, libraries: libraries, reportBusy: false) : []
             var sizes: [String: Int64] = [:]
             var templates: [String: [CompatTool.Flavor: Int64]] = [:]
             let bridgeCopies = libraries.reduce(Int64(0)) { total, library in

@@ -42,9 +42,10 @@ struct HighballLicenceSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 if case .download = mode {
-                    Button("Download without D3DMetal") { finish(.decline) }
+                    Button("Continue without D3DMetal") { finish(.decline) }
                 }
                 Button(acceptLabel) { finish(.accept) }
+                    .disabled(licence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -54,7 +55,7 @@ struct HighballLicenceSheet: View {
 
     private var title: String {
         switch mode {
-        case .download: String(localized: "Download the Highball engine")
+        case .download: String(localized: "Set up game graphics")
         case .enable: String(localized: "Enable D3DMetal")
         }
     }
@@ -62,7 +63,7 @@ struct HighballLicenceSheet: View {
     private var intro: String {
         switch mode {
         case .download(let bytes):
-            String(localized: "Neutron downloads Highball's free Wine engine (\(bytes.formatted(.byteCount(style: .file)))) from Highball's releases on GitHub, with Highball's own installer, into Highball's folder. D3DMetal, Apple's DirectX 12 translator, comes with it and is used only if you accept Apple's licence below. Without it, games use DXMT or DXVK and DirectX 12-only games will not start.")
+            String(localized: "For the widest game support, enable Apple's D3DMetal graphics translator by accepting its licence below. Without it, some games, including DirectX 12 games, will not start. Setup reuses an installed engine or downloads it (up to \(bytes.formatted(.byteCount(style: .file)))).")
         case .enable(let engine):
             String(localized: "D3DMetal is already part of \(engine.displayName). Accepting Apple's licence below lets games use it.")
         }
@@ -70,7 +71,7 @@ struct HighballLicenceSheet: View {
 
     private var acceptLabel: String {
         switch mode {
-        case .download: String(localized: "Accept and Download")
+        case .download: String(localized: "Accept and Set Up")
         case .enable: String(localized: "Accept")
         }
     }

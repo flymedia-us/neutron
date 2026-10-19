@@ -71,6 +71,16 @@ run notproton.sh
 has "reports main already has upstream" "already has upstream/main" "$work/out"
 hasnt "opens nothing" "create" "$STUB_LOG"
 
+echo "== NotProton: a manually adapted source import is already current =="
+checkout
+sha=$(upstream_commit fix.c 'int fixed;' "Fix reviewed upstream")
+full_sha=$(git -C "$work/upstream.git" rev-parse main)
+origin_commit UPSTREAMS.json "$(printf '{"primary":{"commit":"%s"}}' "$full_sha")" "Record adapted upstream source"
+run notproton.sh
+has "source pin avoids proposing an already adapted import" "already records upstream/main" "$work/out"
+hasnt "an integrated source pin opens nothing" "create" "$STUB_LOG"
+checkout
+
 echo "== NotProton: a clean merge becomes a PR =="
 sha=$(upstream_commit fix.c 'int fixed;' "Fix output logging")
 run notproton.sh

@@ -9,6 +9,7 @@ The original project history, source headers and license files remain intact.
 | NotProton | NotProtonNot and contributors; GPLv3 except separately licensed components. See `LICENSE`, `NOTICE` and the upstream history. |
 | Highball integration | Adapted from Proton-ish by MagnusPladsen and contributors; GPLv3. See `UPSTREAMS.json` and `NOTICE`. |
 | HighballKit | Gauthier Piarrette and contributors; GPLv3. Its original license is bundled at `Highball/LICENSE`. |
+| Sparkle | Sparkle Project and contributors; MIT with bundled third-party notices. The unchanged framework license is included at `Sparkle/LICENSE`. |
 | Dobby | Dobby contributors; Apache-2.0, including the upstream copyright notices in its sources. See `Dobby/LICENSE` in the app and the pinned Dobby source. |
 | Steam bridge and SDK headers | Valve and contributors. The Steamworks SDK terms apply where indicated; the Proton 9 steam helper also carries BSD-3-Clause notices. See the unchanged `LICENSE.lsteamclient`, `LICENSE.steam-shim`, and component `LICENSE` files. |
 | Wine and OpenVR headers | Their original LGPL and BSD terms apply; the Wine license, authors list, LGPL text, and pinned OpenVR license are bundled. Retain original source headers. Wine runtime downloads are provided by Highball and retain their own notices. |

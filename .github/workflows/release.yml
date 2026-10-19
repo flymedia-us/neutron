@@ -1,21 +1,44 @@
 name: release
-# Publishing is explicit. Syncing upstream never releases an unreviewed build.
+# Maintainers release by pushing a reviewed v* tag. PRs and upstream sync never
+# receive publishing/signing credentials or publish binaries.
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: release-${{ github.ref }}
+  # Serializes releases and the shared update feed, including different tags.
+  group: neutron-release
   cancel-in-progress: false
 jobs:
+  validate:
+    if: github.repository == 'flymedia-us/neutron' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.version.outputs.build }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: version
+        name: Validate the tag against reviewed main and the source version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 scripts/release-metadata.py validate "$RELEASE_TAG" > "$RUNNER_TEMP/version.json"
+          jq -r 'to_entries[] | "\(.key)=\(.value)"' "$RUNNER_TEMP/version.json" >> "$GITHUB_OUTPUT"
   build:
-    if: github.ref == 'refs/heads/main'
+    needs: validate
     uses: ./.github/workflows/app.yml
-  release:
-    permissions:
-      contents: write
-    needs: build
+  sign:
+    needs: [validate, build]
     runs-on: xcode-27
+    environment: release
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -24,16 +47,46 @@ jobs:
         with:
           name: Neutron
           path: release
-      - name: Verify and publish the prerelease
+      - name: Select Xcode
+        run: sh scripts/select-xcode.sh
+      - name: Sign and notarize with Fly Media
+        env:
+          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_BUILD: ${{ needs.validate.outputs.build }}
+        run: bash scripts/release-sign.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Neutron-signed
+          path: |
+            release/Neutron.zip
+            release/SHA256SUMS
+            release/item.xml
+            release/SOURCE.json
+          if-no-files-found: error
+  publish:
+    needs: [validate, sign]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: Neutron-signed
+          path: release
+      - name: Publish the notarized app and update feed
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -eu
-          version=$(sed -n 's/^#define NOTPROTON_VERSION "\(.*\)"/\1/p' dylib/version.h)
-          test -n "$version"
-          ditto -x -k release/Neutron.zip release/extracted
-          codesign --verify --strict release/extracted/Neutron.app
-          actual=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' release/extracted/Neutron.app/Contents/Info.plist)
-          test "$actual" = "$version"
-          shasum -a 256 release/Neutron.zip > release/SHA256SUMS
-          gh release create "v$version" release/Neutron.zip release/SHA256SUMS --target "$GITHUB_SHA" --title "Neutron $version" --generate-notes --prerelease
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        run: bash scripts/release-publish.sh

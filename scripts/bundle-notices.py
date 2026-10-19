@@ -27,6 +27,7 @@ def main():
         "Wine/AUTHORS": pathlib.Path("scratch/wine/AUTHORS"),
         "OpenVR/LICENSE": pathlib.Path("third_party/openvr/LICENSE"),
         "OpenVR/SOURCE.json": pathlib.Path("third_party/openvr/SOURCE.json"),
+        "Sparkle/LICENSE": pathlib.Path("app/.build/checkouts/Sparkle/LICENSE"),
         "Highball/LICENSE": args.highball / "LICENSE",
         "Dobby/LICENSE": args.dobby / "LICENSE",
         "highball-db/LICENSE": pathlib.Path("third_party/highball-db/LICENSE"),

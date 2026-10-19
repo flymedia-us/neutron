@@ -13,14 +13,14 @@ struct PrefixesView: View {
     var body: some View {
         Group {
             if !model.hasLoaded {
-                ProgressView("Looking for prefixes")
+                ProgressView("Looking for game data")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.prefixes.isEmpty {
                 ContentUnavailableView(
-                    String(localized: "No Prefixes"),
+                    String(localized: "No game data yet"),
                     systemImage: "externaldrive",
                     description: Text(
-                        String(localized: "A prefix appears here once a Windows game has been launched through Neutron.")
+                        String(localized: "Launch a Windows game from Steam first. Its Windows environment appears here if you need troubleshooting tools.")
                     )
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -28,7 +28,7 @@ struct PrefixesView: View {
                 table
             }
         }
-        .navigationTitle("Prefixes")
+        .navigationTitle("Game Tools")
         .safeAreaInset(edge: .bottom) {
             if let failed = model.report {
                 report(
@@ -59,7 +59,7 @@ struct PrefixesView: View {
                 ToolbarItemGroup(placement: .primaryAction) { strip }
             }
         }
-        .task { if model.prefixes.isEmpty { await model.load() } }
+        .task { await model.load() }
         .confirmationDialog(
             PrefixPrompt.deleteTitle(deleting),
             isPresented: asking(.delete),
@@ -210,7 +210,7 @@ struct PrefixesView: View {
 
     private var gameWidth: CGFloat {
         let widths = model.prefixes.map { prefix -> CGFloat in
-            var width = TextWidth.of(prefix.title)
+            var width = min(TextWidth.of(prefix.title), TextWidth.maxTitle)
             if model.isStale(prefix) { width += 22 }
             if prefix.name == nil {
                 width += TextWidth.of(String(localized: "No longer installed"), size: NSFont.smallSystemFontSize) + 6
@@ -267,11 +267,12 @@ struct PrefixesView: View {
                         .disabled(model.isBusy || model.tools.isEmpty)
                         .accessibilityLabel("Needs rebuilding")
                     }
-                    Text(prefix.title).help(prefix.title)
+                    Text(prefix.title).lineLimit(1).help(prefix.title)
                     if prefix.name == nil {
                         Text("No longer installed")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .fixedSize()
                     }
                     if model.busy.contains(prefix.id) {
                         ProgressView().controlSize(.small)
