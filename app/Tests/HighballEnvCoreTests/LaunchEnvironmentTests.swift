@@ -100,6 +100,17 @@ struct LaunchEnvironmentTests {
         #expect(value("WINEDLLPATH_PREPEND", in: run(hb, ["CX_GRAPHICS_BACKEND": "wined3d"])) == nil)
     }
 
+    @Test("Frame limits reach DXMT and DXVK while explicit renderer variables win")
+    func frameLimit() throws {
+        let hb = try install(renderers: ["dxmt", "dxvk", "d9vk"])
+        let dxmt = run(hb, ["CX_GRAPHICS_BACKEND": "dxmt", "NOTPROTON_FPS_LIMIT": "60"])
+        #expect(value("DXMT_CONFIG", in: dxmt)?.contains("d3d11.preferredMaxFrameRate=60") == true)
+        let dxvk = run(hb, ["CX_GRAPHICS_BACKEND": "dxvk", "NOTPROTON_FPS_LIMIT": "120"])
+        #expect(value("DXVK_FRAME_RATE", in: dxvk) == "120")
+        let manual = run(hb, ["CX_GRAPHICS_BACKEND": "dxvk", "NOTPROTON_FPS_LIMIT": "120", "DXVK_FRAME_RATE": "90"])
+        #expect(value("DXVK_FRAME_RATE", in: manual) == nil) // Existing environment value is preserved.
+    }
+
     @Test("A missing engine gives only an error note, so the run script falls back")
     func missingEngine() throws {
         let hb = try install(renderers: [])

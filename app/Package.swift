@@ -20,13 +20,14 @@ let package = Package(
     defaultLocalization: "en",
     platforms: [.macOS("15.0")],
     dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
         // Highball's own launch-environment code (GPL-3.0). upstream-sync bumps this pin.
         .package(url: "https://github.com/gauthierpiarrette/highball", exact: "0.10.15"),
     ],
     targets: [
         .executableTarget(
             name: "NotProtonApp",
-            dependencies: [],
+            dependencies: [.product(name: "Sparkle", package: "Sparkle")],
             path: "Sources/NotProtonApp",
             resources: (hasPayload ? [.copy("Resources/payload")] : []) + [
                 .process("Resources/Localization"),

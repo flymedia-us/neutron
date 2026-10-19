@@ -136,8 +136,8 @@ esac
 launcher_hb='DYLD_INSERT_LIBRARIES=*) export DYLD_INSERT_LIBRARIES='
 # shellcheck disable=SC2016 # Match the literal launcher text.
 case "$launcher_text" in
-  *"$launcher_hb"*'done < "$np_hb_env_file"'*) ok "launcher takes DYLD values from Highball's file for the game" ;;
-  *) bad "launcher takes DYLD values from Highball's file for the game" "a np_hb_env_file loop" "none" ;;
+  *"$launcher_hb"*'done < "$launcher_hb_env"'*) ok "launcher takes DYLD values from Highball's file for the game" ;;
+  *) bad "launcher takes DYLD values from Highball's file for the game" "a local launcher_hb_env loop" "none" ;;
 esac
 
 echo "== Highball's own launch environment (highball-env) =="

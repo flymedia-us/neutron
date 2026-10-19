@@ -7,7 +7,7 @@ struct NotProtonApp: App {
     @State private var status = SystemStatus()
     @State private var prefixes = PrefixesModel()
     @State private var pane: Pane = .status
-    private let updater = AppUpdater()
+    @State private var updater = AppUpdater()
 
     init() {
         AppLog.start()
@@ -38,14 +38,15 @@ struct NotProtonApp: App {
 
         CommandGroup(after: .appInfo) {
             Button("Check for Updates…") { updater.check() }
+                .disabled(!updater.canCheckForUpdates)
         }
 
         CommandGroup(after: .sidebar) {
-            Button("Status") { pane = .status }
+            Button("Home") { pane = .status }
                 .keyboardShortcut("1", modifiers: .command)
-            Button("Prefixes") { pane = .prefixes }
+            Button("Game Tools") { pane = .prefixes }
                 .keyboardShortcut("2", modifiers: .command)
-            Button("Prefix Backups") { pane = .backups }
+            Button("Backups") { pane = .backups }
                 .keyboardShortcut("3", modifiers: .command)
 
             Divider()
@@ -65,7 +66,7 @@ struct NotProtonApp: App {
         }
 
         CommandMenu("Setup") {
-            Button("Install") { Task { await status.requestInstall() } }
+            Button("Set Up Neutron…") { pane = .status; status.setupRequested = true }
                 .keyboardShortcut("i", modifiers: .command)
                 .disabled(!status.canInstall)
 

@@ -32,6 +32,16 @@ enum DefaultTool {
         request == nil && steamDefault == ""
     }
 
+    // A guided first setup explicitly selects the default, even before Steam has
+    // recorded its state. An existing on/off choice must survive a repair.
+    static func configureGuidedDefault(installed: [RunnerBuild], at url: URL = requestFile) throws {
+        guard request(at: url) == nil else { return }
+        guard let tool = highballTool(installed: installed) else {
+            throw StepFailure(step: step, detail: String(localized: "The game engine is not ready. Try setup again."))
+        }
+        try set(tool, at: url)
+    }
+
     private static func firstLine(of url: URL) -> String? {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         return text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first

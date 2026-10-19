@@ -82,6 +82,8 @@ struct StatusRow: View {
                             .textSelection(.enabled)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             if secondaryAction != nil || action != nil || !menu.isEmpty || toggle != nil || trailing != nil {
@@ -160,6 +162,8 @@ struct StatusRow: View {
 
 struct StatusView: View {
     @Environment(SystemStatus.self) private var status
+    @State private var showAdvanced = false
+    @Environment(\.scenePhase) private var scenePhase
     @State private var licenceSheet: HighballLicenceSheet.Mode?
 
     private static let updateBlockPrompt =
@@ -174,7 +178,7 @@ struct StatusView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle("Status")
+        .navigationTitle("Home")
         .toolbar {
             if #available(macOS 26.1, *) {
                 ToolbarItem(placement: .primaryAction) { refreshButton }
@@ -246,6 +250,13 @@ struct StatusView: View {
             Text(Uninstall.confirmation())
         }
         .task { if status.snapshot == nil { await status.refresh() } }
+        .onChange(of: status.setupRequested) { _, wanted in
+            if wanted { status.setupRequested = false; startSetup() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active && status.isIdle { Task { await status.refresh() } }
+        }
+
     }
 
     private func asking(_ confirmation: SystemStatus.Confirmation) -> Binding<Bool> {
@@ -293,66 +304,88 @@ struct StatusView: View {
                 }
             }
 
-            Section("Set Up Neutron") {
-                StatusRow(
-                    title: String(localized: "Play Windows games on your Mac"),
-                    value: String(localized: "Install Steam integration and download the free Highball engine in one guided setup."),
-                    tone: .info,
-                    action: StatusAction(label: String(localized: "Set Up Neutron"), isProminent: true,
-                                         isEnabled: status.canInstall) {
-                        licenceSheet = .download(bytes: Self.engineDownloadBytes)
-                    }
-                )
-            }
-
-            Section("Steam") {
-                StatusRow(
-                    title: String(localized: "Location"),
-                    value: SupportPaths.Steam.app.path(percentEncoded: false),
-                    action: StatusAction(
-                        label: String(localized: "Choose\u{2026}"),
-                        help: String(localized: "Use a copy of Steam from another folder or drive."),
-                        isEnabled: status.isIdle
-                    ) { Task { await status.chooseSteam() } }
-                )
-                steamRow(snapshot.steam, payload: snapshot.payload)
-                if snapshot.steamRunning {
-                    StatusRow(
-                        title: String(localized: "Steam is running"),
-                        value: String(localized: "Close Steam before continuing."),
-                        tone: .info
-                    )
-                }
-                updateBlockRow(snapshot.updateBlocked)
-                StatusRow(
-                    title: String(localized: "Controller permission"),
-                    value: String(localized: "Clear Steam's controller permission so macOS asks for it again."),
-                    action: StatusAction(
-                        label: String(localized: "Reset"),
-                        isEnabled: status.isIdle
-                    ) { Task { await status.resetControllerPermission() } }
-                )
-            }
+            SetupOverview(snapshot: snapshot, status: status, startSetup: startSetup)
 
             Section {
-                highballSection(snapshot)
-            } header: {
-                Text("Highball")
+                Button {
+                    withAnimation { showAdvanced.toggle() }
+                } label: {
+                    HStack {
+                        Text("Advanced")
+                        Spacer()
+                        Image(systemName: showAdvanced ? "chevron.up" : "chevron.down")
+                            .foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(showAdvanced ? String(localized: "Expanded") : String(localized: "Collapsed"))
             }
 
-            componentsSection(snapshot.payload)
-
-            dangerSection
-
-            Section("Thanks") {
-                Text("Neutron is a fork of NotProtonNot/NotProton and runs games with Highball's engine. Thank you both.")
-                HStack(spacing: 16) {
-                    Link("NotProtonNot/NotProton on GitHub", destination: ProjectLinks.notProton)
-                    Link("gauthierpiarrette/highball on GitHub", destination: ProjectLinks.highball)
-                }
+            if showAdvanced {
+                advancedContent(snapshot)
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func startSetup() {
+        guard status.canInstall, status.snapshot?.setupBlocked == false else { return }
+        if status.snapshot?.highball.contains(where: { $0.isUsable && $0.d3dmetalAccepted }) == true {
+            Task { await status.setUpNeutron(acceptD3DMetal: true) }
+        } else {
+            licenceSheet = .download(bytes: Self.engineDownloadBytes)
+        }
+    }
+
+    @ViewBuilder
+    private func advancedContent(_ snapshot: StatusSnapshot) -> some View {
+        Section("Steam") {
+            StatusRow(
+                title: String(localized: "Location"),
+                value: SupportPaths.Steam.app.path(percentEncoded: false),
+                action: StatusAction(
+                    label: String(localized: "Choose\u{2026}"),
+                    help: String(localized: "Use a copy of Steam from another folder or drive."),
+                    isEnabled: status.isIdle
+                ) { Task { await status.chooseSteam() } }
+            )
+            steamRow(snapshot.steam, payload: snapshot.payload)
+            if snapshot.steamRunning {
+                StatusRow(
+                    title: String(localized: "Steam is running"),
+                    value: String(localized: "Setup will close Steam for you. Finish any downloads or games first."),
+                    tone: .info
+                )
+            }
+            updateBlockRow(snapshot.updateBlocked)
+            StatusRow(
+                title: String(localized: "Controller permission"),
+                value: String(localized: "Clear Steam's controller permission so macOS asks for it again."),
+                action: StatusAction(
+                    label: String(localized: "Reset"),
+                    isEnabled: status.isIdle
+                ) { Task { await status.resetControllerPermission() } }
+            )
+        }
+
+        Section {
+            highballSection(snapshot)
+        } header: {
+            Text("Highball")
+        }
+
+        componentsSection(snapshot.payload)
+
+        dangerSection
+
+        Section("Thanks") {
+            Text("Neutron is a fork of NotProtonNot/NotProton and runs games with Highball's engine. Thank you both.")
+            HStack(spacing: 16) {
+                Link("NotProtonNot/NotProton on GitHub", destination: ProjectLinks.notProton)
+                Link("gauthierpiarrette/highball on GitHub", destination: ProjectLinks.highball)
+            }
+        }
     }
 
     private var dangerSection: some View {

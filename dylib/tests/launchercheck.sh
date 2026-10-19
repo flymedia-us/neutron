@@ -255,6 +255,29 @@ is "no artwork, no icon key" "" "$icon_arg"
 is "no artwork logged" "no icon resolved, launching without one" "$(cat "$log")"
 if [ -d "$np_support/shortcut-icons" ]; then bad "launch leaves shortcut cache alone" "absent" "present"; else ok "launch leaves shortcut cache alone"; fi
 
+echo "== local Highball launch settings"
+local_hb=$(sed -n '/^launcher_hb_env=""$/,/^# end local Highball launch settings$/p' "$SRC")
+[ -n "$local_hb" ] || { echo "FAIL: local Highball staging not found"; exit 1; }
+stage "External Game"
+loader_res="$loader_stage/Contents/Resources"
+np_hb_env_file="$T/removable-highball.env"
+printf '%s\n' 'DYLD_FALLBACK_FRAMEWORK_PATH=/highball/frameworks' > "$np_hb_env_file"
+eval "$local_hb"
+is "launcher uses its installed local resource" "$loader_app/Contents/Resources/highball.env" "$launcher_hb_env"
+install_bundle
+rm "$np_hb_env_file"
+is "settings survive the original file becoming unavailable" 'DYLD_FALLBACK_FRAMEWORK_PATH=/highball/frameworks' "$(cat "$launcher_hb_env")"
+case "$launcher_body" in
+  *np_hb_env_file*) bad "launcher never reads the external settings path" local external ;;
+  *) ok "launcher never reads the external settings path" ;;
+esac
+stage "No Highball"
+loader_res="$loader_stage/Contents/Resources"
+np_hb_env_file=""
+eval "$local_hb"
+is "no Highball environment leaves no local path" "" "$launcher_hb_env"
+is "no empty resource is created" no "$([ -e "$loader_res/highball.env" ] && echo yes || echo no)"
+
 echo "== session lasts as long as the shim =="
 session_trap=$(sed -n '/^terminate() {$/,/^trap terminate TERM INT HUP$/p' "$SRC")
 session_wait=$(sed -n '/^open -n -W -a "\$loader_app"/,/^exit \$status$/p' "$SRC")

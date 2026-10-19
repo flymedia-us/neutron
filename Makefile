@@ -44,7 +44,9 @@ SRCS := \
 	dylib/feats/compat.c \
 	dylib/feats/webui.c \
 	dylib/feats/compatsvc.c \
+	dylib/feats/usershortcuts.c \
 	dylib/feats/webpatch.c \
+	dylib/feats/nativeplatform.c \
 	dylib/feats/input_access.c \
 	vendor/cJSON.c
 
@@ -143,7 +145,7 @@ mincheck:
 l10ncheck:
 	@bin=$$(swift build --package-path app -c release --show-bin-path); \
 	python3 dylib/tests/l10ncheck.py app/Sources/NotProtonApp/Resources/Localization/Localizable.xcstrings \
-		"$$bin/../../Intermediates.noindex/NotProtonApp.build/$$(basename "$$bin")" zh-Hans
+		"$$bin/../../Intermediates.noindex/NotProtonApp.build/$$(basename "$$bin")" zh-Hans it
 
 # runcheck owns compat_run.sh, whose warnings wait for a change that can move
 # the embedded __text baseline
@@ -159,7 +161,10 @@ scriptcheck:
 	if [ -z "$(strip $(SCRIPTS))" ]; then $(call SKIP,scriptcheck,a git checkout); exit 0; fi; \
 	for s in $(SCRIPTS); do \
 		shellcheck "$$s" || exit 1; \
-		sh -n "$$s" || exit 1; \
+		case "$$(head -n 1 "$$s")" in \
+			*bash*) bash -n "$$s" || exit 1 ;; \
+			*) sh -n "$$s" || exit 1 ;; \
+		esac; \
 	done; \
 	echo "==> scriptcheck: $(words $(SCRIPTS)) scripts lint and parse clean"
 
@@ -273,6 +278,12 @@ $(GATECHECK): dylib/tests/gatecheck.c dylib/feats/webpatch.c dylib/feats/webpatc
 	@mkdir -p $(dir $@)
 	$(TEST_CC) -O1 -o $@ dylib/tests/gatecheck.c
 
+NATIVEPLATFORMCHECK := $(OUT_DIR)/nativeplatformcheck
+
+$(NATIVEPLATFORMCHECK): dylib/tests/nativeplatformcheck.c dylib/feats/nativeplatform.c dylib/feats/nativeplatform.h dylib/util/file.c
+	@mkdir -p $(dir $@)
+	$(TEST_CC) -O1 -DHELPER_TIMEOUT_MS=1000 -o $@ dylib/tests/nativeplatformcheck.c dylib/feats/nativeplatform.c dylib/util/file.c
+
 webpatch-fixtures:
 	@if [ ! -d $(WEBPATCH_FIXTURES) ] || [ ! -f dylib/tests/gatecheck.c ]; then \
 		$(call SKIP,webpatch-fixtures,$(WEBPATCH_FIXTURES)); exit 0; fi; \
@@ -292,7 +303,18 @@ webpatch-fixtures:
 			if [ $$rc -ne 0 ]; then fail=1; fi; \
 		done; \
 	done; \
+	for f in $(WEBPATCH_FIXTURES)/library.*.js; do \
+		out=$$($(GATECHECK) --library "$$f" $$tmp/$$(basename $$f .js).out.js 2>&1) || { echo "$$out"; fail=1; }; \
+		out=$$($(GATECHECK) --library-literal "$$f" $$tmp/$$(basename $$f .js).literal.out.js 2>&1) || { echo "$$out"; fail=1; }; \
+	done; \
+	out=$$($(GATECHECK) --older-filter $$tmp/library.older.out.js 2>&1) || { echo "$$out"; fail=1; }; \
+	if [ $$fail -eq 0 ]; then \
+		if command -v node >/dev/null 2>&1; then \
+			node dylib/tests/library-filter/behavior.js $$tmp/library.*.out.js || fail=1; \
+		else echo "==> library filter: node not found, skipped"; fi; \
+	fi; \
 	rm -rf $$tmp; \
+	$(MAKE) -s $(NATIVEPLATFORMCHECK) && $(NATIVEPLATFORMCHECK) || fail=1; \
 	if [ $$fail -ne 0 ]; then exit 1; fi; \
 	echo "==> gate table and $$n webpatch fixtures: anchors intact, drift refused"
 
@@ -363,6 +385,7 @@ panel-behavior:
 	$(TEST_CC) -O1 -o $(OUT_DIR)/panel-emit \
 	  $(PANEL_TESTS)/emit.c && \
 	node $(PANEL_TESTS)/behavior.js $(OUT_DIR)/panel-emit && \
+	node $(PANEL_TESTS)/display.js $(OUT_DIR)/panel-emit && \
 	node $(PANEL_TESTS)/switching.js $(OUT_DIR)/panel-emit && \
 	node $(PANEL_TESTS)/launch-options.js $(OUT_DIR)/panel-emit && \
 	node $(PANEL_TESTS)/shell.js $(OUT_DIR)/panel-emit && \
@@ -416,10 +439,10 @@ OVERLAY_SHIM       := $(OUT_DIR)/overlay-shim.dylib
 OVERLAY_SHIM_FLAGS := -mmacosx-version-min=$(MIN_VER) $(AVAIL) -dynamiclib -O2 -Wall -Wextra \
                       -install_name @rpath/overlay-shim.dylib \
                       -framework Metal -framework QuartzCore \
-                      -framework CoreGraphics -framework CoreFoundation
+                      -framework CoreGraphics -framework CoreFoundation -framework Foundation
 OVERLAY_SHIM_TESTS := overlay-shim/tests
 OVERLAY_SHIM_TEST_FLAGS := -mmacosx-version-min=$(MIN_VER) -O2 -Wall -Wextra \
-                      -framework Metal -framework Foundation -framework QuartzCore
+                      -framework Metal -framework Foundation -framework QuartzCore -framework CoreGraphics
 
 overlay-shim: $(OVERLAY_SHIM)
 
@@ -446,7 +469,7 @@ overlay-shim-tests: $(OVERLAY_SHIM)
 		$(call SKIP,overlay-shim-tests,$(OVERLAY_SHIM_TESTS)); exit 0; fi; \
 	mkdir -p $(OUT_DIR); \
 	fail=0; ran=0; skipped=0; \
-	for t in device bridge delivery; do \
+	for t in device bridge delivery ownership; do \
 		for a in arm64 x86_64; do \
 			$(CC) -arch $$a $(OVERLAY_SHIM_TEST_FLAGS) -o $(OUT_DIR)/$$t.$$a \
 				$(OVERLAY_SHIM_TESTS)/$$t.m || exit 1; \
@@ -610,6 +633,7 @@ APP_BUNDLE_PAYLOAD := $(APP_BUNDLE)/Contents/Resources/NotProtonApp_NotProtonApp
 APP_ZIP     := $(OUT_DIR)/Neutron.zip
 APP_VERSION := $(shell sed -n 's/^\#define NOTPROTON_VERSION "\(.*\)"/\1/p' dylib/version.h)
 
+APP_BUILD_VERSION ?= $(APP_VERSION)
 APP_SIGN_ID ?= auto
 APP_SIGN_TEAM ?= BJZSH247Q9
 APP_REQUIRE_TEAM ?= 0
@@ -642,13 +666,19 @@ app: app-payload $(ICON_CAR)
 	cp app/Info.plist "$(APP_BUNDLE)/Contents/Info.plist"
 	/usr/libexec/PlistBuddy -c \
 		"Set :CFBundleShortVersionString $(APP_VERSION)" -c \
-		"Set :CFBundleVersion $(APP_VERSION)" \
+		"Set :CFBundleVersion $(APP_BUILD_VERSION)" \
 		"$(APP_BUNDLE)/Contents/Info.plist"
+	python3 scripts/configure-updater.py "$(APP_BUNDLE)/Contents/Info.plist"
+	@mkdir -p "$(APP_BUNDLE)/Contents/Frameworks"
+	@framework="$$(swift build --package-path app -c release --show-bin-path)/Sparkle.framework"; \
+		test -d "$$framework" || { echo 'Sparkle framework is missing' >&2; exit 1; }; \
+		ditto "$$framework" "$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework"
 	cp "$$(swift build --package-path app -c release --show-bin-path)/NotProtonApp" \
 		"$(APP_BUNDLE)/Contents/MacOS/NotProtonApp"
 	xcrun vtool -set-build-version macos $(MIN_VER) "$$(xcrun --sdk macosx --show-sdk-version)" \
 		-replace -output "$(APP_BUNDLE)/Contents/MacOS/NotProtonApp" \
 		"$(APP_BUNDLE)/Contents/MacOS/NotProtonApp"
+	install_name_tool -add_rpath @executable_path/../Frameworks "$(APP_BUNDLE)/Contents/MacOS/NotProtonApp"
 	cp -R "$$(swift build --package-path app -c release --show-bin-path)/NotProtonApp_NotProtonApp.bundle" \
 		"$(APP_BUNDLE)/Contents/Resources/"
 	cp -R "$(APP_BUNDLE)/Contents/Resources/NotProtonApp_NotProtonApp.bundle/Contents/Resources/"*.lproj \

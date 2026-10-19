@@ -12,6 +12,12 @@ git remote get-url upstream >/dev/null 2>&1 || git remote add upstream "$UPSTREA
 git fetch -q upstream main
 git fetch -q origin main
 
+pinned=$(git show origin/main:UPSTREAMS.json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["primary"]["commit"])' 2>/dev/null) || pinned=""
+if [ -n "$pinned" ] && [ "$(git rev-parse "$pinned^{commit}" 2>/dev/null)" = "$(git rev-parse upstream/main)" ]; then
+  sync_log "notproton: origin/main already records upstream/main as integrated"
+  exit 0
+fi
+
 if git merge-base --is-ancestor upstream/main origin/main; then
   sync_log "notproton: origin/main already has upstream/main"
   exit 0

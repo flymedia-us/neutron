@@ -264,13 +264,37 @@ case "$app_id" in ''|0) app_id=$(basename "$STEAM_COMPAT_DATA_PATH" 2>/dev/null)
 case "$app_id" in ''|*[!0-9]*) app_id=0 ;; esac
 echo "app_id=$app_id (STEAM_COMPAT_APP_ID=$STEAM_COMPAT_APP_ID)" >> "$log" 2>&1 || true
 
+# Steam gives every non-Steam shortcut a game ID ending in 0x02000000.
+shortcut_game_id() {
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  [ "${#1}" -le 20 ] || return 1
+  high=0
+  low="$1"
+  if [ "${#1}" -gt 10 ]; then
+    high="${1%??????????}"
+    low="${1#"$high"}"
+  fi
+  high="${high#"${high%%[!0]*}"}"
+  low="${low#"${low%%[!0]*}"}"
+  [ $(( (${high:-0} % 4294967296 * 1410065408 + ${low:-0}) % 4294967296 )) = 33554432 ]
+}
+
 # Steam does not set SteamAppId or SteamGameId for helpers like the install-script
 # evaluator. If they are set, SteamAPI_Init registers the helper as the running game so the
 # real launch fails with AppError_16. Not applicable to non-Steam shortcuts, which come in
 # as waitforexitandrun.
 case "$verb" in
   waitforexitandrun)
-    [ -n "$SteamAppId" ] || export SteamAppId="$app_id"
+    # Some games are poorly engineered and treat a shortcut's SteamAppID as if it were a real
+    # Steam appid. Those games immediately fail Steam ownership checks rather than looking
+    # inward and realizing that the actual game build that is running is a version that was
+    # sold outside of Steam and that the applicable ownership checks should be performed (not
+    # the Steam ones). Rockstar: do better?
+    if shortcut_game_id "$SteamGameId"; then
+      unset SteamAppId
+    else
+      [ -n "$SteamAppId" ] || export SteamAppId="$app_id"
+    fi
     [ -n "$SteamGameId" ] || export SteamGameId="$app_id"
     ;;
 esac
@@ -296,6 +320,7 @@ tool_name() {
 # Steam passes "run" for helpers such as install scripts, which get no dialog.
 show_alert() {
   [ "$verb" != run ] || return 0
+  exec 8>&- 9>&-
   osascript >/dev/null 2>&1 <<APPLESCRIPT || true
 display alert "$1" message "$2" as critical
 APPLESCRIPT
@@ -667,12 +692,46 @@ plan_hidden_controllers() {
 $controllers_wanted"
 }
 
-import_prefix_settings() {
-  if [ "$NOTPROTON_RETINA" = "1" ]; then
-    retina_line='"RetinaMode"="y"'
-  else
-    retina_line='"RetinaMode"=-'
+# Sets Wine's DisableHidraw for games with "Disable hidraw" checked. When it's
+# unchecked, the value is removed only if NotProton set it.
+plan_disable_hidraw() {
+  hidraw_file="$STEAM_COMPAT_DATA_PATH/notproton-disable-hidraw"
+  hidraw_value=""
+  [ -n "$STEAM_COMPAT_DATA_PATH" ] && [ ! -L "$hidraw_file" ] || return 1
+  hidraw_set=""
+  [ ! -f "$WINEPREFIX/system.reg" ] || hidraw_set=$(tr '[:upper:]' '[:lower:]' < "$WINEPREFIX/system.reg" \
+    | awk '/^\[/ { s = index($0, "[system\\\\controlset001\\\\services\\\\winebus]") == 1; next }
+      s && $0 == "\"disablehidraw\"=dword:00000001" { print 1; exit }')
+  if [ "$NOTPROTON_DISABLE_HIDRAW" = "1" ]; then
+    [ -n "$hidraw_set" ] || hidraw_value='"DisableHidraw"=dword:00000001'
+  elif [ -f "$hidraw_file" ] && [ -n "$hidraw_set" ]; then
+    hidraw_value='"DisableHidraw"=-'
   fi
+}
+
+winebus_lines() {
+  [ -n "$hidraw_value" ] || return 0
+  printf '%s\r\n' '[HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\WineBus]' "$hidraw_value" ''
+}
+
+video_lines() {
+  [ "$verb" = waitforexitandrun ] || return 0
+  printf '%s\r\n' '[HKEY_CURRENT_USER\Software\Wine\Mac Driver]' "$retina_line" ''
+  [ -n "$dpi_value" ] || return 0
+  printf '%s\r\n' '[HKEY_CURRENT_USER\Control Panel\Desktop]' "$dpi_value" ''
+}
+
+import_prefix_settings() {
+  # Native display modes are available by default. An explicit scaled-pixel
+  # choice still wins. Windows UI scaling is independent of in-game resolution.
+  display_dpi=${NOTPROTON_DPI:-96}
+  case "$display_dpi" in 96|120|144|168|192|216|240) ;; *) display_dpi=96 ;; esac
+  if [ "$NOTPROTON_RETINA" = "0" ] && [ "$display_dpi" -eq 96 ]; then
+    retina_line='"RetinaMode"="n"'
+  else
+    retina_line='"RetinaMode"="y"'
+  fi
+  dpi_value=""
   controllers_planned=0
   if plan_hidden_controllers 2>/dev/null; then
     controllers_planned=1
@@ -681,6 +740,20 @@ import_prefix_settings() {
     controllers_remove=""
     echo "=== could not track the hidden controllers, leaving them as they are ===" >> "$log" 2>&1 || true
   fi
+  hidraw_planned=0
+  if plan_disable_hidraw 2>/dev/null; then
+    hidraw_planned=1
+    if [ "$NOTPROTON_DISABLE_HIDRAW" = "1" ] && [ -n "$hidraw_value" ]; then
+      : > "$hidraw_file" 2>/dev/null || hidraw_value=""
+    fi
+  else
+    hidraw_value=""
+    echo "=== could not track DisableHidraw, leaving it as it is ===" >> "$log" 2>&1 || true
+  fi
+  # Steam sends install scripts no launch options, so they keep the game's video settings.
+  if [ "$verb" = waitforexitandrun ]; then
+    dpi_value=$(printf '"LogPixels"=dword:%08x' "$display_dpi")
+  fi
   settings_file=$(mktemp "$WINEPREFIX/drive_c/notproton-settings.XXXXXX" 2>/dev/null) \
     || settings_file=""
   if [ -z "$settings_file" ] || ! { printf '%s\r\n' \
@@ -688,11 +761,12 @@ import_prefix_settings() {
       '[HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\AeDebug]' '"Auto"="0"' '' \
       '[HKEY_LOCAL_MACHINE\Software\Wow6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug]' '"Auto"="0"' '' \
       '[HKEY_CURRENT_USER\Software\Wine\WineDbg]' '"ShowCrashDialog"=dword:00000000' '' \
-      '[HKEY_CURRENT_USER\Software\Wine\Mac Driver]' "$retina_line" '' \
+      && video_lines && printf '%s\r\n' \
       '[HKEY_LOCAL_MACHINE\Software\Classes\steam]' '"URL Protocol"=""' '' \
       '[HKEY_LOCAL_MACHINE\Software\Classes\steam\shell\open\command]' \
       '@="\"C:\\Program Files (x86)\\Steam\\steam.exe\" \"%1\""' '' \
-      && hidraw_lines add "$controllers_add" && hidraw_lines remove "$controllers_remove"; } \
+      && hidraw_lines add "$controllers_add" && hidraw_lines remove "$controllers_remove" \
+      && winebus_lines; } \
       > "$settings_file" 2>/dev/null; then
     [ -z "$settings_file" ] || rm -f "$settings_file"
     echo "=== could not write the prefix settings, launching without them ===" >> "$log" 2>&1 || true
@@ -703,13 +777,20 @@ import_prefix_settings() {
   without_lock_fds "$WINELOADER" reg import "C:\\${settings_file##*/}" >> "$log" 2>&1 \
     && import_status=0 || import_status=$?
   rm -f "$settings_file"
+  if [ "$import_status" -eq 0 ] && [ "$hidraw_planned" -eq 1 ] && [ "$NOTPROTON_DISABLE_HIDRAW" != "1" ]; then
+    rm -f "$hidraw_file"
+  fi
+  if [ "$import_status" -eq 0 ] && [ -n "$controllers_add$controllers_remove$hidraw_value$dpi_value" ]; then
+    # Wine only reads these keys when it starts, so restart Wine to apply them.
+    without_lock_fds "$WINESERVER" -k >> "$log" 2>&1 || true
+    without_lock_fds "$WINESERVER" -w >> "$log" 2>&1 || true
+  fi
+  if [ "$import_status" -eq 0 ] && [ "$hidraw_planned" -eq 1 ] && [ "$NOTPROTON_DISABLE_HIDRAW" = "1" ]; then
+    echo "controllers: hidraw disabled (NOTPROTON_DISABLE_HIDRAW=1)" >> "$log" 2>&1 || true
+  fi
+
   if [ "$import_status" -eq 0 ] && [ "$controllers_planned" -eq 1 ]; then
     write_owned_controllers "$controllers_wanted" 2>/dev/null || true
-    if [ -n "$controllers_add$controllers_remove" ]; then
-      # Wine only reads these keys when it starts, so restart Wine to apply them.
-      without_lock_fds "$WINESERVER" -k >> "$log" 2>&1 || true
-      without_lock_fds "$WINESERVER" -w >> "$log" 2>&1 || true
-    fi
     if [ "$NOTPROTON_RAW_CONTROLLERS" = "1" ]; then
       echo "controllers: games read them directly (NOTPROTON_RAW_CONTROLLERS=1)" >> "$log" 2>&1 || true
     elif [ -n "$controllers_wanted" ]; then
@@ -717,6 +798,7 @@ import_prefix_settings() {
         >> "$log" 2>&1 || true
     fi
   fi
+
   [ "$import_status" -eq 0 ] \
     || echo "=== prefix settings import exited status=$import_status ===" >> "$log" 2>&1 || true
 }
@@ -1296,7 +1378,7 @@ if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
     show_alert "Saved-game folders need attention" "Neutron left the conflicting files in place. Open this prefix's neutron-run.log for details before trying again."
     exit 1
   fi
-  echo "video: RetinaMode=${NOTPROTON_RETINA:-0}" >> "$log" 2>&1 || true
+  [ "$verb" != waitforexitandrun ] || echo "video: RetinaMode=${NOTPROTON_RETINA:-auto-native} DPI=${NOTPROTON_DPI:-96}" >> "$log" 2>&1 || true
   stage_step="game drive"
   map_game_drive
   stage_step="prefix settings"
@@ -1610,6 +1692,19 @@ else
   echo "loader staging failed, game mode unavailable" >> "$log" 2>&1 || true
 fi
 
+# Keep launcher configuration with the local bundle. A game on a removable
+# volume must not need a shell read from that volume before Wine can start.
+launcher_hb_env=""
+if [ -n "$np_hb_env_file" ]; then
+  if ! cp -f "$np_hb_env_file" "$loader_res/highball.env"; then
+    echo "=== could not stage Highball launch settings ===" >> "$log" 2>&1 || true
+    rm -rf "$loader_work"
+    exit 1
+  fi
+  launcher_hb_env="$loader_app/Contents/Resources/highball.env"
+fi
+# end local Highball launch settings
+
 cat > "$loader_macos/launcher" <<LAUNCHER
 #!/bin/sh
 export WINELOADER="$WINELOADER"
@@ -1631,13 +1726,13 @@ if [ -r "$CX_ROOT/runtime.env" ]; then
   done < "$CX_ROOT/runtime.env"
 fi
 # Highball's own values for this game replace the engine defaults above
-if [ -n "$np_hb_env_file" ] && [ -r "$np_hb_env_file" ]; then
+if [ -n "$launcher_hb_env" ] && [ -r "$launcher_hb_env" ]; then
   while IFS= read -r line || [ -n "\$line" ]; do
     case "\$line" in
       DYLD_FALLBACK_LIBRARY_PATH=*|DYLD_FALLBACK_FRAMEWORK_PATH=*) export "\$line" ;;
       DYLD_INSERT_LIBRARIES=*) export DYLD_INSERT_LIBRARIES="\${DYLD_INSERT_LIBRARIES:+\$DYLD_INSERT_LIBRARIES:}\${line#DYLD_INSERT_LIBRARIES=}" ;;
     esac
-  done < "$np_hb_env_file"
+  done < "$launcher_hb_env"
 fi
 [ -n "\$NOTPROTON_GAME_CWD" ] && cd "\$NOTPROTON_GAME_CWD"
 "$WINELOADER" "\$@"

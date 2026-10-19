@@ -69,3 +69,15 @@ struct PanelSettingsTests {
         #expect(settings(["WINEDLLOVERRIDES": "d3d11=b;dinput8=n,b"]).dllOverrides == "d3d11=b;dinput8=n,b")
     }
 }
+
+@Suite("Per-game frame limit")
+struct FrameLimitTests {
+    @Test("Only valid limits become Highball settings", arguments: [
+        ("", 0), ("0", 0), ("30", 30), ("144", 144), ("1000", 1000),
+        ("-1", 0), ("1001", 0), ("60fps", 0), ("60;command", 0),
+    ])
+    func limits(value: String, expected: Int) {
+        let settings = PanelSettings.bottleSettings(environment: ["NOTPROTON_FPS_LIMIT": value], engineID: "test")
+        #expect(settings.fpsCap == expected)
+    }
+}

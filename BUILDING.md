@@ -23,11 +23,11 @@ The regular `make app` also selects the company's identity when available, but
 falls back to ad hoc signing on contributors' Macs. CI explicitly selects
 `APP_SIGN_ID=-`; CI artifacts do not contain or use Fly Media's private keys.
 
-The configured Mac currently has an **Apple Development** identity for Fly Media.
+The configured Mac currently has an **Apple Development** identity and no valid **Developer ID Application** identity.
 A development signature identifies the company for local testing; it does not
 make an app a notarized public distribution. Public Gatekeeper-friendly releases
 need a **Developer ID Application** signature and Apple's notarization process.
-See [Apple's distribution guidance](https://developer.apple.com/developer-id/).
+See [RELEASING.md](RELEASING.md) for GitHub release automation and [Apple's distribution guidance](https://developer.apple.com/developer-id/).
 Do not label development or ad hoc artifacts as notarized releases.
 
 No new Apple certificates are created by these build scripts. Signing or

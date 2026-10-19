@@ -11,6 +11,9 @@ public enum PanelSettings {
             settings.renderer = renderer
             settings.rendererExplicit = true
         }
+        if let cap = env["NOTPROTON_FPS_LIMIT"].flatMap(Int.init), (0...1000).contains(cap) {
+            settings.fpsCap = cap
+        }
         settings.metalHUD = env["MTL_HUD_ENABLED"] == "1"
         settings.advertiseAVX = env["ROSETTA_ADVERTISE_AVX"] == "1"
         switch env["WINEMSYNC"] {

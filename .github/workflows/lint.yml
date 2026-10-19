@@ -54,5 +54,11 @@ jobs:
       - name: Upstream sync scripts
         run: make synccheck
 
+      - name: Release metadata and configuration checks
+        run: |
+          python3 scripts/test-release.py
+          shellcheck scripts/release-sign.sh scripts/release-publish.sh
+          bash -n scripts/release-sign.sh scripts/release-publish.sh
+
       - name: Brand check
         run: make brandcheck
