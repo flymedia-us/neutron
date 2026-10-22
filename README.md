@@ -77,6 +77,8 @@ The full app workflow builds and packages `Neutron.zip`. When a new version in `
 
 ## Changes from upstream
 
+- 2026-10-22: Refresh highball-db to `a5fbc49` (540 games / 39 recipes), incorporating the latest compatibility reports and game entries. HighballKit remains at 0.10.22 and the verified runtime remains r19; newer engine integration is tracked separately.
+
 - 2026-10-22: Alpha 6 checks access before updating Steam. When App Management permission is needed, setup opens a guided prompt, remembers the requested setup, and resumes once after relaunch before reporting a permission failure.
 
 - 2026-10-22: Restore Steam Auto-Cloud Windows save-folder mapping for Highball games, including Spider-Man Remastered. Migrate existing Highball tool selections without rebuilding prefixes or removing saves.
