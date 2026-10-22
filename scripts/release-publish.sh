@@ -5,7 +5,7 @@ repo=flymedia-us/neutron
 test "$GITHUB_REPOSITORY" = "$repo"
 (cd release && sha256sum -c SHA256SUMS)
 # 'updates' is a permanent prerelease containing only the rolling feed. It never
-# replaces GitHub's latest stable release or supplies executable content itself.
+# replaces GitHub's latest app release or supplies executable content itself.
 previous=()
 if gh release view updates --repo "$repo" --json assets > release/feed-assets.json 2>/dev/null; then
   if jq -e '.assets[] | select(.name == "appcast.xml")' release/feed-assets.json >/dev/null; then
@@ -28,6 +28,7 @@ if len(sys.argv) > 2:
         sys.exit('A newer commit has already been released; refusing to publish an older build.')
 PYCODE
 python3 scripts/release-metadata.py feed release/item.xml release/appcast.xml "${previous[@]}"
+python3 scripts/release-notes.py "$RELEASE_TAG" release/notes.md
 # A retry can finish a draft or repair a feed after publishing. Never overwrite
 # public binaries: a rerun only accepts exactly the already published checksum.
 published=false
@@ -39,33 +40,15 @@ if gh release view "$RELEASE_TAG" --repo "$repo" --json isDraft > release/existi
     published=true
   fi
 else
-  args=(--draft --verify-tag --title "Neutron $RELEASE_VERSION" --generate-notes)
-  python3 - <<'PY'
-import os, pathlib
-version = os.environ['RELEASE_VERSION']
-tag = os.environ['RELEASE_TAG']
-pathlib.Path('release/notes.md').write_text(f'''[**Download Neutron {version} for Apple silicon**](https://github.com/flymedia-us/neutron/releases/download/{tag}/Neutron-{version}.dmg)
-
-1. Open the DMG and drag **Neutron** into **Applications**.
-2. Open Neutron from Applications and choose **Set Up Neutron**.
-3. Open Steam and play your Windows games.
-
-Requires an Apple silicon Mac, macOS 15 or later, Steam for macOS, and Rosetta 2.
-The app and disk image are signed by Fly Media LLC and notarized by Apple.
-
-Neutron checks for signed updates in the app. The ZIP asset is used by the updater;
-the DMG is the recommended download for installation.
-''')
-PY
-  args+=(--notes-file release/notes.md)
-  if [ "$PRERELEASE" = true ]; then args+=(--prerelease --latest=false); fi
+  args=(--draft --verify-tag --title "$RELEASE_VERSION" --notes-file release/notes.md)
   gh release create "$RELEASE_TAG" --repo "$repo" "${args[@]}"
 fi
 if [ "$published" = false ]; then
   gh release upload "$RELEASE_TAG" "release/Neutron-$RELEASE_VERSION.dmg" release/Neutron.zip release/SHA256SUMS release/SOURCE.json --repo "$repo" --clobber
 fi
 # Publish the downloadable release before advertising it to installed apps.
-args=(--draft=false)
-if [ "$PRERELEASE" = true ]; then args+=(--prerelease --latest=false); else args+=(--prerelease=false --latest); fi
-gh release edit "$RELEASE_TAG" --repo "$repo" "${args[@]}"
+# GitHub's Latest/sidebar requires a normal release, even while the version has
+# an alpha/beta/RC label. Sparkle's preview channel is independent of this flag.
+gh release edit "$RELEASE_TAG" --repo "$repo" --draft=false --prerelease=false --latest \
+  --title "$RELEASE_VERSION" --notes-file release/notes.md
 gh release upload updates release/appcast.xml --repo "$repo" --clobber

@@ -198,6 +198,22 @@ provisioning profile, Mac App Distribution certificate, or installer certificate
    and build instructions for every distributed binary. No credentials or
    downloaded proprietary engines are added to source or release assets.
 
+App releases use the version alone as the title (for example `0.1.0-alpha.6`),
+and the body contains only the changelog. GitHub's Assets section supplies the
+downloads; installation instructions and requirements live in the README.
+`scripts/release-notes.py` generates GitHub's What's Changed notes against the
+closest previously published app version in the tag's ancestry. It excludes the
+rolling `updates` release, drafts, future versions, and inherited upstream tags
+that have no Neutron release. The first app release gets an initial-release note
+and a link to its source history.
+
+Every shipped app version is a normal GitHub release, explicitly marked Latest,
+so it appears in the repository sidebar and `/releases/latest` resolves to the
+current download. GitHub's prerelease flag is reserved for the rolling feed.
+An alpha/beta/RC suffix still describes the app's maturity and still places its
+Sparkle item in the `preview` channel. GitHub's Latest label does not change
+which updates stable or preview clients accept.
+
 The first untagged version is released when this automation reaches main.
 An existing published version is never silently replaced. To publish changed
 binaries, increase the version and merge; to recover a failed release, rerun its
@@ -205,7 +221,8 @@ failed jobs or dispatch **release** on the existing tag.
 
 The automatic update feed is the `appcast.xml` asset on the permanent **updates**
 prerelease. All hosting remains on GitHub. This metadata release is never marked
-as the latest stable release. Updates are advertised only after the versioned
+as the latest app release. Keep its tag and asset URL unchanged for installed
+clients. Updates are advertised only after the versioned
 app release becomes downloadable. Stable clients ignore items in the `preview`
 channel; prerelease clients accept previews and stable releases. Feed history
 retains the last stable version when previews are published.
@@ -216,6 +233,35 @@ using the exact previously uploaded signed artifact; public version assets are
 never overwritten. If publication fails after signing, rerun the failed publish
 job so it reuses the signed artifact. For changed binaries, create a new version.
 Use manual workflow dispatch **on the existing tag** to recover a failed run.
+
+### Refresh release presentation without rebuilding
+
+Presentation changes do not need a new app version, signing, or access to private
+keys. Generate notes using a checkout with all tags (`fetch-depth: 0` in Actions):
+
+```sh
+python3 scripts/release-notes.py v0.1.0-alpha.6 /private/tmp/neutron-release-notes.md
+gh release edit v0.1.0-alpha.6 --repo flymedia-us/neutron --title 0.1.0-alpha.6 --notes-file /private/tmp/neutron-release-notes.md --prerelease=false --latest
+```
+
+Use `--latest` only for the current app release. For historical releases, use
+`--latest=false`; retain their existing changelog when making a cosmetic cleanup.
+Never move tags or replace public binaries to change release text. The publish
+script also refreshes the title and notes on retries, but first requires the
+original signed assets and matching published checksums, and refuses an older
+build than the feed. Reuse the original `item.xml` from the signed artifact when
+retrying publication; its signature and preview channel must remain unchanged.
+No private key should be read, exported, written, or shared for this operation.
+
+Verified on 2026-10-22 by rerunning the revised publisher for `v0.1.0-alpha.6`
+with its original `Neutron-signed` artifact. GitHub reported it as Latest with a
+changelog comparing alpha.5 to alpha.6. Public app asset IDs and SHA-256 digests
+were unchanged, and the downloaded feed was byte-for-byte unchanged. The ZIP's
+Ed25519 signature matched the public key embedded in the app; app code signing
+and both app and DMG notarization tickets validated. Alpha.5 received the same
+presentation cleanup while retaining its existing changelog. No private keys
+were accessed. This verifies publishing and update authentication; an actual
+update-and-relaunch test remains separate from presentation maintenance.
 
 ## Verify an actual public release
 

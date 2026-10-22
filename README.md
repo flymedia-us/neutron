@@ -73,7 +73,7 @@ make app-flymedia
 make app-tests seedcheck envcheck settingscheck bridgecheck gamedrivecheck launchercheck brandcheck synccheck
 ```
 
-The full app workflow builds and packages `Neutron.zip`. When a new version in `dylib/version.h` reaches reviewed `main`, GitHub Actions automatically creates its tag, runs the release build, signs with Fly Media Developer ID, notarizes and staples the app and DMG, and publishes the DMG plus the Sparkle update feed on GitHub. No manual tagging or publishing command is needed. Existing versions are not republished by ordinary code or documentation updates. It fails if distribution credentials are missing. Alpha/beta/RC versions are marked as prereleases. See [RELEASING.md](RELEASING.md) for the one-time setup and release procedure. Neutron does not reuse another publisher's update-signing key or Homebrew tap.
+The full app workflow builds and packages `Neutron.zip`. When a new version in `dylib/version.h` reaches reviewed `main`, GitHub Actions automatically creates its tag, runs the release build, signs with Fly Media Developer ID, notarizes and staples the app and DMG, and publishes the DMG plus the Sparkle update feed on GitHub. No manual tagging or publishing command is needed. Existing versions are not republished by ordinary code or documentation updates. It fails if distribution credentials are missing. App versions appear as normal GitHub releases with a version title, changelog, and download assets; the newest is marked Latest. Alpha/beta/RC labels still control Sparkle's preview channel independently. See [RELEASING.md](RELEASING.md) for the one-time setup and release procedure. Neutron does not reuse another publisher's update-signing key or Homebrew tap.
 
 ## Changes from upstream
 
