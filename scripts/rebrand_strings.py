@@ -19,6 +19,9 @@ STRING_LITERAL = re.compile(r'"(?:[^"\\\n]|\\.)*"')
 
 
 def rename(text: str) -> str:
+    # Upstream credits name the original project and its repository intentionally.
+    if "NotProtonNot" in text:
+        return text
     return WORD.sub("Neutron", text)
 
 
