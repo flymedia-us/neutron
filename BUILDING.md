@@ -1,8 +1,26 @@
 # Building Neutron
 
-Use the toolchain and dependency pins in `README.md` and `.github/workflows/app.yml`.
+Use Xcode 27 or newer and the dependency pins in `.github/workflows/app.yml`.
 Install Rosetta 2 before building the x86_64 bridge on an Apple Silicon Mac.
 Build on a branch and submit a PR; `main` requires successful app and shell checks.
+
+## Build and test
+
+```sh
+brew install cmake shellcheck node mingw-w64 bison flex fontforge gpatch
+git clone https://github.com/jmpews/Dobby.git vendor/dobby
+git -C vendor/dobby checkout 5dfc8546954ce3b3198132ab13fddb89ee92cdd7
+make dobby all overlay-shim iconmaker appinfo bridge
+# Font generation also needs the pinned Python packages used in .github/workflows/app.yml.
+make fonts app
+make app-tests seedcheck envcheck settingscheck bridgecheck gamedrivecheck launchercheck brandcheck synccheck
+```
+
+The build pins HighballKit and engine manifests. Update the verified hashes and
+detours before substituting engine files. The app workflow builds and packages
+`Neutron.zip`; public distribution uses the signed, notarized release process in
+[RELEASING.md](RELEASING.md). Contributor builds without the public update key
+disable background updates.
 
 ## Fly Media signing on a Mac
 

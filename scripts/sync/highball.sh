@@ -87,7 +87,7 @@ git commit -q -m "Sync Highball: ${newer_kit:+HighballKit $newer_kit}${newer_kit
 $notes"
 git push -q -u origin "$branch"
 open_review "$branch" highball "sync: Highball ${newer_kit:+$newer_kit }${newer_db:+db $(printf %.7s "$newer_db")}" \
-  "$(printf '## What\n%s\n## Before merging\n- CI green: a HighballKit bump can change the API `highball-env` builds against.\n- Read the Highball release notes for engine changes that need a new `SupportedRunner` entry.\n- Add a dated line under "Changes from upstream" in README.md.\n%s' "$notes" "$(footer)")"
+  "$(printf '## What\n%s\n## Before merging\n- CI green: a HighballKit bump can change the API `highball-env` builds against.\n- Read the Highball release notes for engine changes that need a new `SupportedRunner` entry.\n- Add a dated entry to CHANGELOG.md.\n%s' "$notes" "$(footer)")"
 sync_log "highball: prepared $branch for review"
 
 [ -z "${GITHUB_OUTPUT:-}" ] || printf 'branch=%s\n' "$branch" >> "$GITHUB_OUTPUT"

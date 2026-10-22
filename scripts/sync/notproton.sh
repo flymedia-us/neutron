@@ -36,7 +36,7 @@ git checkout -q -B "$branch" origin/main
 if git merge --no-ff --no-edit -m "Merge NotProton $sha" upstream/main >/dev/null 2>&1; then
   git push -q -u origin "$branch"
   open_review "$branch" notproton "sync: merge NotProton $sha" \
-    "$(printf '## What\nMerges upstream NotProton `%s` into main. Clean merge.\n\n## Upstream commits\n```\n%s\n```\n\n## Before merging\n- CI must be green, including `brandcheck`.\n- Add a dated line under "Changes from upstream" in README.md if the change is user-visible.\n%s' "$sha" "$commits" "$(footer)")"
+    "$(printf '## What\nMerges upstream NotProton `%s` into main. Clean merge.\n\n## Upstream commits\n```\n%s\n```\n\n## Before merging\n- CI must be green, including `brandcheck`.\n- Add a dated entry to CHANGELOG.md if the change is user-visible.\n%s' "$sha" "$commits" "$(footer)")"
   [ -z "${GITHUB_OUTPUT:-}" ] || printf 'branch=%s\n' "$branch" >> "$GITHUB_OUTPUT"
   sync_log "notproton: prepared $sha for review"
 else
