@@ -16,7 +16,10 @@ def team_identity(team, distribution=False):
     identities = run("security", "find-identity", "-v", "-p", "codesigning")
     candidates = re.findall(r'([A-Fa-f0-9]{40}) "([^"]+)"', identities)
     # Prefer a distribution certificate when installed, otherwise use development.
-    candidates.sort(key=lambda pair: not pair[1].startswith("Developer ID Application:"))
+    candidates.sort(key=lambda pair: (
+        pair[0].upper() != "120D2200993750D65F7CC0BC117EDE47DEA94AEC",
+        not pair[1].startswith("Developer ID Application:"),
+    ))
     for identity, name in candidates:
         if distribution and not name.startswith("Developer ID Application:"):
             continue

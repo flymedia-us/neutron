@@ -27,7 +27,7 @@ Neutron uses its own app identity (`us.flymedia.neutron`) and support directory 
 
 ## Per-game settings
 
-Most games can use Automatic. It applies the bundled Highball database's renderer recommendations and supported launch-environment recipe steps when a matching entry exists. Explicit graphics choices and launch-option overrides take precedence. The bundled snapshot contains 443 curated game entries and 34 recipes; it is refreshed through upstream maintenance. Database status is compatibility evidence, not a guarantee of optimal performance on every Mac. Recipe installers, registry edits, Winetricks, file operations and launch-argument injection are not applied automatically.
+Most games can use Automatic. It applies the bundled Highball database's renderer recommendations and supported launch-environment recipe steps when a matching entry exists. Explicit graphics choices and launch-option overrides take precedence. The bundled snapshot contains 523 curated game entries and 39 recipes; it is refreshed through upstream maintenance. Database status is compatibility evidence, not a guarantee of optimal performance on every Mac. Recipe installers, registry edits, Winetricks, file operations and launch-argument injection are not applied automatically.
 
 For troubleshooting or tuning, open **Steam → game Properties → Compatibility → Neutron game settings**. These controls start collapsed:
 
@@ -40,7 +40,7 @@ Choose the actual render resolution (such as 1920 × 1080 or 3840 × 2160) insid
 
 ## Upstream maintenance
 
-NotProton is the direct code base and primary upstream. Neutron incorporates NotProton 1.2.0 through `2791679` (2026-10-19), with Neutron-specific adaptations to preserve Highball, internal/external libraries, native display modes, and independent Windows UI scaling. The original fork started on 1.1.9 (`d5c6065`). Highball support is a separate import recorded in `UPSTREAMS.json`; Neutron does not wait for or automatically merge the rest of Proton-ish. Full NotProton history is retained. Set up the optional local remotes with:
+NotProton is the direct code base and primary upstream. Neutron incorporates NotProton 1.2.0 through `730f100` (2026-10-21), with Neutron-specific adaptations to preserve Highball, internal/external libraries, native display modes, and independent Windows UI scaling. The original fork started on 1.1.9 (`d5c6065`). Highball support is a separate import recorded in `UPSTREAMS.json`; Neutron does not wait for or automatically merge the rest of Proton-ish. Full NotProton history is retained. Set up the optional local remotes with:
 
 ```sh
 git remote add upstream https://github.com/NotProtonNot/NotProton.git
@@ -72,6 +72,8 @@ make app-tests seedcheck envcheck settingscheck bridgecheck gamedrivecheck launc
 The full app workflow builds and packages `Neutron.zip`. The release workflow runs automatically on reviewed `v*` tags, signs with Fly Media Developer ID, notarizes and staples the app, and publishes versioned releases plus the Sparkle feed on GitHub. It fails if distribution credentials are missing. Alpha/beta/RC versions are marked as prereleases. See [RELEASING.md](RELEASING.md) for the one-time setup and release procedure. Neutron does not reuse another publisher's update-signing key or Homebrew tap.
 
 ## Changes from upstream
+
+- 2026-10-21: Alpha 5 incorporates NotProton through `730f100`: prefix rebuilds from Steam with progress and backup choices, same-architecture build switching, recovery after an early crash, AVX2 defaults, reduced x87 precision controls, game-title parsing and Italian translations. Update HighballKit to 0.10.22 and the game database to 523 games / 39 recipes. Preserve Neutron’s Highball, external-drive and display settings. Release CI checks credentials before compiling.
 
 - 2026-10-19: Integrate NotProton 1.2.0 (`2791679`), including Windows library filters, non-Steam shortcuts, prefix locking, download deadlines, external Steam verification, overlay ownership, and controller fixes. Keep Highball and external-library support; align Advanced sections; add signed in-app updates and automated notarized GitHub releases. Neutron retains explicit DPI settings instead of upstream’s automatic DPI doubling.
 
