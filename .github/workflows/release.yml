@@ -1,5 +1,5 @@
 name: release
-# Maintainers release by pushing a reviewed v* tag. PRs and upstream sync never
+# automatic release creates v* tags from reviewed main. PRs and upstream sync never
 # receive publishing/signing credentials or publish binaries.
 on:
   push:
@@ -77,6 +77,7 @@ jobs:
           name: Neutron-signed
           path: |
             release/Neutron.zip
+            release/Neutron-*.dmg
             release/SHA256SUMS
             release/item.xml
             release/SOURCE.json

@@ -2,9 +2,12 @@
 """Release regressions: channel history, update authentication, and local builds."""
 import base64
 import importlib.util
+import json
+import os
 import pathlib
 import plistlib
 import subprocess
+import shutil
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -25,6 +28,80 @@ configuration = module('check-release-config')
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_main_automatically_tags_new_versions_without_duplicate_releases(self):
+        repo = pathlib.Path(self.work.name) / 'automatic-source'
+        repo.mkdir()
+        def git(*args):
+            return subprocess.check_output(['git', '-C', str(repo), *args], text=True).strip()
+        git('init', '-q', '-b', 'main')
+        git('config', 'user.name', 'Release fixture')
+        git('config', 'user.email', 'release@example.invalid')
+        (repo / 'scripts').mkdir()
+        (repo / 'dylib').mkdir()
+        for name in ['auto-release.sh', 'release-metadata.py']:
+            shutil.copy(ROOT / name, repo / 'scripts' / name)
+        version = repo / 'dylib/version.h'
+        version.write_text('#define NOTPROTON_VERSION "0.1.0-alpha.5"\n')
+        git('add', '.')
+        git('commit', '-qm', 'Reviewed version')
+        git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+        bin_path = pathlib.Path(self.work.name) / 'bin'
+        bin_path.mkdir()
+        calls = pathlib.Path(self.work.name) / 'gh-calls.jsonl'
+        gh = bin_path / 'gh'
+        gh.write_text('''#!/usr/bin/env python3
+import json, os, sys
+with open(os.environ['GH_CALLS'], 'a') as log:
+    log.write(json.dumps(sys.argv[1:]) + '\\n')
+if sys.argv[1:3] == ['run', 'list']:
+    print('[{"databaseId": 42}]' if os.environ.get('EXISTING_RELEASE') else '[]')
+''')
+        gh.chmod(0o755)
+        def prepare(**overrides):
+            calls.write_text('')
+            environment = dict(os.environ, PATH=str(bin_path) + os.pathsep + os.environ['PATH'],
+                               GH_CALLS=str(calls), GITHUB_REPOSITORY='flymedia-us/neutron',
+                               GITHUB_REF='refs/heads/main', GITHUB_SHA=git('rev-parse', 'HEAD'))
+            environment.update(overrides)
+            result = subprocess.run(['bash', 'scripts/auto-release.sh'], cwd=repo,
+                                    env=environment, capture_output=True, text=True)
+            return result, [json.loads(line) for line in calls.read_text().splitlines()]
+        result, commands = prepare()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c[:2] for c in commands], [['run', 'list'], ['api', '--method'], ['workflow', 'run']])
+        self.assertIn('ref=refs/tags/v0.1.0-alpha.5', commands[1])
+        self.assertEqual(commands[2][-2:], ['--ref', 'v0.1.0-alpha.5'])
+        git('tag', 'v0.1.0-alpha.5')
+        # Interrupted dispatch is recoverable without overwriting the existing tag.
+        result, commands = prepare()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c[:2] for c in commands], [['run', 'list'], ['workflow', 'run']])
+        result, commands = prepare(EXISTING_RELEASE='1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(commands), 1)
+        # Ordinary main updates do not republish a previously tagged version.
+        (repo / 'readme.txt').write_text('Documentation update')
+        git('add', '.')
+        git('commit', '-qm', 'Same version')
+        git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+        result, commands = prepare()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(commands, [])
+        version.write_text('#define NOTPROTON_VERSION "0.1.0-alpha.6"\n')
+        git('add', '.')
+        git('commit', '-qm', 'Next version')
+        git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+        result, commands = prepare()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('ref=refs/tags/v0.1.0-alpha.6', commands[1])
+        result, commands = prepare(GITHUB_REF='refs/heads/unreviewed')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(commands, [])
+        (repo / 'dirty.txt').write_text('Uncommitted')
+        result, commands = prepare()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(commands, [])
+
     def test_release_preflight_reports_names_without_disclosing_credentials(self):
         self.assertEqual(len(configuration.errors({})), len(configuration.NAMES))
         values = {name: 'secret-do-not-print' for name in configuration.NAMES}

@@ -4,9 +4,19 @@ Neutron is distributed directly through `flymedia-us/neutron` on GitHub. No App
 Store submission, provisioning profile, App Sandbox, paid runtime, or third-party
 hosting is required. Fly Media's Apple Developer team is `BJZSH247Q9`.
 
-A push of a `v*` tag starts `.github/workflows/release.yml`. The tag must exactly
-match `dylib/version.h`, point to a commit in reviewed `main`, and use `X.Y.Z` or
-`X.Y.Z-alpha.N`, `-beta.N`, or `-rc.N`. Upstream sync never creates release tags.
+When a new version in `dylib/version.h` reaches reviewed `main`,
+`.github/workflows/auto-release.yml` creates its `v*` tag and explicitly dispatches
+`.github/workflows/release.yml` on that tag. No manual tag or publish step is
+needed. Explicit dispatch avoids GitHub's suppression of push events created by
+`GITHUB_TOKEN`. Ordinary main updates with an already-tagged version do nothing.
+A dispatch interrupted after tagging can be retried without changing the tag;
+a version that already has a release run is not dispatched again automatically.
+
+The version must use `X.Y.Z` or `X.Y.Z-alpha.N`, `-beta.N`, or `-rc.N`.
+The release tag must match the source version and point into reviewed main.
+PRs and upstream-sync branches never publish. Signing credentials remain in the
+`release` environment restricted to `v*` tags. Manual tag pushes and dispatches
+remain available for recovery.
 
 The workflow validates the source and release credential formats before compiling,
 runs the full app CI build and tests, and then
@@ -85,7 +95,7 @@ and verification before publishing on GitHub. Packaging differs deliberately:
 
 | Project/channel | Artifact | Updates |
 | --- | --- | --- |
-| Neutron on GitHub | Notarized app ZIP | Sparkle checks GitHub and installs authenticated updates; automatic installation is optional |
+| Neutron on GitHub | Signed, notarized drag-to-Applications DMG; authenticated ZIP for updates | Sparkle checks GitHub and installs authenticated updates; automatic installation is optional |
 | AppleTree on GitHub | Signed, notarized DMG | Manual downloads; no updater or update feed |
 | AppleTree on the Mac App Store | App Store distribution | Managed by the App Store; the preferred purchase supports development |
 
@@ -152,7 +162,9 @@ signing check. It does not put Neutron in the App Store or submit it for review.
 There is no per-release manual notarization task after the credentials are set:
 the release job signs the app, ZIPs it, submits it with `notarytool`, waits for
 Apple to accept it, staples the ticket to the app, verifies it with Gatekeeper,
-then creates the final ZIP and signs that archive for Sparkle. Stapling makes
+then creates the final ZIP and signs that archive for Sparkle. It also builds a
+drag-to-Applications DMG, signs and notarizes the image, staples its ticket,
+and verifies the app mounted from that image. Stapling makes
 the ticket travel with the download, including for offline verification. The
 job stops if any check fails. AppleTree's DMG pipeline follows the same process
 and also notarizes the disk image. App Store builds use the store's equivalent
@@ -176,22 +188,20 @@ provisioning profile, Mac App Distribution certificate, or installer certificate
 
 ## Publish a version
 
-1. Change `dylib/version.h` in a PR, for example to `0.1.0-alpha.5`. Keep Neutron's
+1. Change `dylib/version.h` in a PR, for example to `0.1.0-alpha.6`. Keep Neutron's
    version separate from NotProton's upstream version. Merge after CI passes.
-2. Tag the merged commit and push the tag:
+2. GitHub Actions automatically creates the version tag and starts **release**.
+3. The release publishes `Neutron-VERSION.dmg`, `Neutron.zip`, `SHA256SUMS`, and
+   `SOURCE.json`. The DMG is the recommended installer: open it, drag Neutron into
+   Applications, then open Neutron. The ZIP remains the authenticated Sparkle
+   update artifact. GitHub also provides source archives; preserve the source tag
+   and build instructions for every distributed binary. No credentials or
+   downloaded proprietary engines are added to source or release assets.
 
-   ```sh
-   git fetch origin main
-   git tag -a v0.1.0-alpha.5 origin/main -m 'Neutron 0.1.0-alpha.5'
-   git push origin v0.1.0-alpha.5
-   ```
-
-3. Watch the **release** workflow. It publishes `Neutron.zip`, `SHA256SUMS`, and
-   `SOURCE.json` on the versioned release. GitHub also provides source archives;
-   the app bundles original component notices, dependency revisions, and the
-   precise source URL. Preserve the source tag and build instructions for every
-   distributed binary. No credentials or downloaded proprietary engines are
-   added to the source repository or release assets.
+The first untagged version is released when this automation reaches main.
+An existing published version is never silently replaced. To publish changed
+binaries, increase the version and merge; to recover a failed release, rerun its
+failed jobs or dispatch **release** on the existing tag.
 
 The automatic update feed is the `appcast.xml` asset on the permanent **updates**
 prerelease. All hosting remains on GitHub. This metadata release is never marked
@@ -209,7 +219,7 @@ Use manual workflow dispatch **on the existing tag** to recover a failed run.
 
 ## Verify an actual public release
 
-Test a downloaded, quarantined ZIP on a clean Mac: move the app to Applications,
+Test a downloaded DMG on a clean Mac: open it and drag the app to Applications,
 open it, and confirm Gatekeeper accepts the notarized Fly Media signature. A
 normal first-launch confirmation may remain. Signing and notarization remove
 the unidentified-developer **Open Anyway** workaround; macOS still controls
