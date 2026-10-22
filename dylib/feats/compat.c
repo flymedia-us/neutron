@@ -21,6 +21,8 @@
 // skips the app.
 #define TOOL_DIR_NAME "neutron"
 #define TOOL_RUN      "/run"
+#define LEGACY_HIGHBALL_TOOL "neutron-highball-x64-crossover26.3-r19"
+#define CLOUD_HIGHBALL_TOOL  "neutron-proton-highball-x64-crossover26.3-r19"
 
 #define COMPAT_MANAGER_ENABLED_OFF  0x7B0
 #define COMPAT_MANAGER_USER_OFF     0x300  // CUser *
@@ -839,6 +841,26 @@ static void *find_tool(void *compat_mgr, const char *wanted) {
     return NULL;
 }
 
+// This is a Steam tool identity migration, not an engine/prefix migration. Steam's
+// registration code only initializes Windows Cloud roots for names containing
+// "proton" (client 1792192922, arm64 0x6c0bec). Never remap a foreign choice or
+// fall back to a different engine when the replacement has not registered yet.
+static const char *cloud_tool_name(const char *name) {
+    return name && strcmp(name, LEGACY_HIGHBALL_TOOL) == 0 ? CLOUD_HIGHBALL_TOOL : name;
+}
+
+int np_compat_migrate_cloud_mapping(void *compat_mgr, uint32_t appid) {
+    if (!compat_mgr || !g_set_mapping) return 0;
+    const char *name = appid ? np_compat_app_mapping(compat_mgr, appid)
+                            : np_compat_global_mapping(compat_mgr);
+    const char *replacement = cloud_tool_name(name);
+    if (replacement == name || !find_tool(compat_mgr, replacement)) return 0;
+    np_compat_map_tool(compat_mgr, appid, replacement);
+    NP_LOG("np_compat_migrate_cloud_mapping: app %u now uses %s for Windows Cloud paths",
+           appid, replacement);
+    return 1;
+}
+
 void np_compat_register_tools(void *compat_mgr) {
     static int registered = 0;
 
@@ -936,6 +958,7 @@ static int read_default_tool_request(const char *path, char *name, size_t size) 
 // the request in <support>/default-tool. Returns 1 when the global mapping changed.
 int np_compat_apply_default_tool_in(void *compat_mgr, const char *support) {
     if (!compat_mgr || !support) return 0;
+    int migrated = np_compat_migrate_cloud_mapping(compat_mgr, 0);
     const char *current = np_compat_global_mapping(compat_mgr);
 
     char status_path[768];
@@ -953,7 +976,7 @@ int np_compat_apply_default_tool_in(void *compat_mgr, const char *support) {
     if (!read_default_tool_request(request_path, request, sizeof(request))) {
         // No request yet: a Highball tool becomes the default only when Steam has none, once.
         // The request file then records it, so the app's switch shows on and can undo it.
-        if (current && *current) return 0;
+        if (current && *current) return migrated;
         const char *highball = NULL;
         for (int i = 0; i < g_tool_count && !highball; i++)
             if (strcmp(g_tools[i].runtime, "highball") == 0) highball = g_tools[i].name;
@@ -968,11 +991,12 @@ int np_compat_apply_default_tool_in(void *compat_mgr, const char *support) {
         return 1;
     }
 
-    switch (np_compat_default_tool_action(request, current)) {
+    const char *wanted = cloud_tool_name(request);
+    switch (np_compat_default_tool_action(wanted, current)) {
     case NP_DEFAULT_TOOL_SET:
-        np_compat_map_tool(compat_mgr, 0, request);
+        np_compat_map_tool(compat_mgr, 0, wanted);
         NP_LOG("np_compat_apply_default_tool: %s is now the default tool (was %s)",
-               request, current ? current : "none");
+               wanted, current ? current : "none");
         return 1;
     case NP_DEFAULT_TOOL_CLEAR:
         np_compat_map_tool(compat_mgr, 0, "");
@@ -981,7 +1005,7 @@ int np_compat_apply_default_tool_in(void *compat_mgr, const char *support) {
     case NP_DEFAULT_TOOL_KEEP:
         break;
     }
-    return 0;
+    return migrated;
 }
 
 // The app lists each Highball tool's renderers in <support>/renderers, one line per tool:

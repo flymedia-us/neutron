@@ -45,7 +45,7 @@ enum DefaultTool {
     private static func firstLine(of url: URL) -> String? {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         return text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { SupportedRunners.migratedToolName(String($0).trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
 
     private static func write(_ tool: String, to url: URL) throws {

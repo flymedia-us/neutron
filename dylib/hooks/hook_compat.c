@@ -72,6 +72,9 @@ static void *hook_FindToolForTargetApp(void *self, uint32_t appid) {
                appid);
         return NULL;
     }
+    // Preserve per-game selections made before the Cloud-compatible tool ID.
+    // Migrate before resolving so launch and Auto-Cloud see the same tool.
+    np_compat_migrate_cloud_mapping(self, appid);
     void *tool = orig(self, appid);
 
     if (tool || appid == 0)

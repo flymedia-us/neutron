@@ -22,6 +22,8 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>Neutron</string>
+	<key>NSAppBundlesUsageDescription</key>
+	<string>Neutron needs permission to install and update its Steam integration so Steam can launch Windows games.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Neutron modifications © 2026 Fly Media LLC. Includes upstream components; see bundled licenses and credits.</string>
 	<key>CFBundlePackageType</key>

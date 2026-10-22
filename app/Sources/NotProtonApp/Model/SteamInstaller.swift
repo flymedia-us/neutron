@@ -6,6 +6,7 @@ enum InstallPhase: Sendable {
     case checkingPayload
     case stagingBridge
     case preflight
+    case checkingAccess
     case stoppingClient
     case copyingDylib
     case installingSignatures
@@ -20,6 +21,7 @@ enum InstallPhase: Sendable {
         case .checkingPayload: String(localized: "Preparing")
         case .stagingBridge: String(localized: "Staging components")
         case .preflight: String(localized: "Checking Steam")
+        case .checkingAccess: String(localized: "Checking access to update Steam")
         case .stoppingClient: String(localized: "Stopping Steam")
         case .copyingDylib: String(localized: "Installing")
         case .installingSignatures: String(localized: "Installing signatures")
@@ -124,6 +126,7 @@ enum SteamInstaller {
             try verifyRunner(build, SupportPaths.clonedRoot(forBuild: build.id, runners: runners))
         }
         try modifications.mark(app)
+        report(.checkingAccess)
         let patching = try needsPatching(plist: plist, dylib: dylib, shipping: payload.dylib, app: app)
         let replacingFiles = try files.contains {
             try $0.needsClientStopped && !$0.matches() && FileManager.default.fileExists(atPath: $0.destination.path(percentEncoded: false))

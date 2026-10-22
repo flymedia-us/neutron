@@ -50,7 +50,7 @@ struct SetupReadinessTests {
                                   highballDBPresent: true, signatureDatabase: "test", legacyCompatPresent: 0,
                                   legacyCompatExpected: 0),
             installedRunners: builds, installContent: .current,
-            defaultToolRequest: "neutron-highball-x64-crossover26.3-r19")
+            defaultToolRequest: "neutron-proton-highball-x64-crossover26.3-r19")
     }
 
     @Test("Readiness follows real files, tool health and prerequisites, including after setup")

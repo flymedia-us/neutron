@@ -6,7 +6,7 @@ const { panel, walk, details, runner, FORMS } = require('./harness');
 const emit = process.argv[2];
 if (!emit) { console.error('usage: renderer-gaps.js <emit>'); process.exit(2); }
 
-const HB = 'neutron-highball-x64-crossover26.3-r19';
+const HB = 'neutron-proton-highball-x64-crossover26.3-r19';
 
 let failed = 0;
 for (const form of Object.keys(FORMS)) {

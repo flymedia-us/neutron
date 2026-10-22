@@ -73,6 +73,10 @@ The full app workflow builds and packages `Neutron.zip`. When a new version in `
 
 ## Changes from upstream
 
+- 2026-10-22: Alpha 6 checks access before updating Steam. When App Management permission is needed, setup opens a guided prompt, remembers the requested setup, and resumes once after relaunch before reporting a permission failure.
+
+- 2026-10-22: Restore Steam Auto-Cloud Windows save-folder mapping for Highball games, including Spider-Man Remastered. Migrate existing Highball tool selections without rebuilding prefixes or removing saves.
+
 - 2026-10-21: Alpha 5 incorporates NotProton through `730f100`: prefix rebuilds from Steam with progress and backup choices, same-architecture build switching, recovery after an early crash, AVX2 defaults, reduced x87 precision controls, game-title parsing and Italian translations. Update HighballKit to 0.10.22 and the game database to 523 games / 39 recipes. Preserve Neutron’s Highball, external-drive and display settings. Release CI checks credentials before compiling.
 
 - 2026-10-19: Integrate NotProton 1.2.0 (`2791679`), including Windows library filters, non-Steam shortcuts, prefix locking, download deadlines, external Steam verification, overlay ownership, and controller fixes. Keep Highball and external-library support; align Advanced sections; add signed in-app updates and automated notarized GitHub releases. Neutron retains explicit DPI settings instead of upstream’s automatic DPI doubling.
