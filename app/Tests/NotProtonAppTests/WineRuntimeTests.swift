@@ -118,11 +118,24 @@ struct WineRuntimeTests {
         #expect(RunnerInstaller.hasClone(forBuild: "x64-old-r1", runners: runners))
     }
 
+    @Test("Every offered Highball tool enables Steam's Proton Auto-Cloud path mapping")
+    func highballCloudPaths() throws {
+        let tools = SupportedRunners.all.filter { $0.runtime == .highball }.flatMap(\.tools)
+        #expect(!tools.isEmpty)
+        #expect(tools.allSatisfy { $0.name.lowercased().contains("proton") })
+        let repo = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let compat = try String(contentsOf: repo.appending(path: "dylib/feats/compat.c"), encoding: .utf8)
+        for tool in tools {
+            #expect(compat.contains("\"\(tool.name)\""))
+        }
+    }
+
     @Test("Highball r19 is a supported Rosetta build with one tool")
     func highballR19Supported() throws {
         let build = try #require(SupportedRunners.build(id: "x64-crossover26.3-r19"))
         #expect(build.runtime == .highball)
-        #expect(build.tools.map(\.name) == ["neutron-highball-x64-crossover26.3-r19"])
+        #expect(build.tools.map(\.name) == ["neutron-proton-highball-x64-crossover26.3-r19"])
         #expect(build.tools.allSatisfy { $0.flavor == .rosetta })
         #expect(NtdllPatcher.byBuild["x64-crossover26.3-r19"]?.count == 2)
     }

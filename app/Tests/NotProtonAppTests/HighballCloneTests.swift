@@ -112,6 +112,6 @@ struct HighballCloneTests {
         )
 
         let tools = try String(contentsOf: runners.appending(path: "tools"), encoding: .utf8)
-        #expect(tools.contains("neutron-highball-x64-crossover26.3-r19\tx64-crossover26.3-r19\trosetta\thighball\tHighball Wine 11 (r19)\n"))
+        #expect(tools.contains("neutron-proton-highball-x64-crossover26.3-r19\tx64-crossover26.3-r19\trosetta\thighball\tHighball Wine 11 (r19)\n"))
     }
 }

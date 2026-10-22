@@ -249,7 +249,18 @@ struct StatusView: View {
         } message: {
             Text(Uninstall.confirmation())
         }
-        .task { if status.snapshot == nil { await status.refresh() } }
+        .alert(String(localized: "Allow Neutron to update Steam"), isPresented: asking(.appManagement)) {
+            Button(Remedy.settingsButton) {
+                if let pane = Remedy.appManagement.settingsPane { Remedy.openSettings(pane) }
+            }
+            Button("Not Now", role: .cancel) {}
+        } message: {
+            Text("Enable Neutron in System Settings → Privacy & Security → App Management. Then return here and choose Relaunch & Continue. Setup will resume automatically.")
+        }
+        .task {
+            if status.snapshot == nil { await status.refresh() }
+            await status.resumeSetupAfterRelaunch()
+        }
         .onChange(of: status.setupRequested) { _, wanted in
             if wanted { status.setupRequested = false; startSetup() }
         }
@@ -276,7 +287,19 @@ struct StatusView: View {
 
     private func form(_ snapshot: StatusSnapshot) -> some View {
         Form {
-            if let failure = status.failure {
+            if status.accessNeeded != nil, status.failure == nil {
+                StatusRow(
+                    title: String(localized: "Access needed"),
+                    value: String(localized: "Allow Neutron to update Steam in App Management, then relaunch to continue setup."),
+                    tone: .warning,
+                    action: StatusAction(label: String(localized: "Relaunch & Continue"), isEnabled: status.isIdle) {
+                        status.relaunchForAppManagement()
+                    }
+                )
+                Button(Remedy.settingsButton) {
+                    if let pane = Remedy.appManagement.settingsPane { Remedy.openSettings(pane) }
+                }
+            } else if let failure = status.failure {
                 StatusRow(
                     title: String(localized: "Failed"),
                     value: failure,

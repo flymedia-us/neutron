@@ -107,6 +107,9 @@ const char *np_compat_app_mapping(void *compat_mgr, uint32_t appid);
 void np_compat_set_mapping_fn(uintptr_t set_compat_tool_mapping);
 void np_compat_map_tool(void *compat_mgr, uint32_t appid, const char *tool_name);
 
+// Upgrade the old Highball tool ID once its Cloud-compatible replacement exists.
+int np_compat_migrate_cloud_mapping(void *compat_mgr, uint32_t appid);
+
 // The global default tool (app 0), or NULL when Steam has none.
 const char *np_compat_global_mapping(void *compat_mgr);
 

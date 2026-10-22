@@ -292,12 +292,19 @@ enum SupportedRunners {
                 .i386Windows: "836c05b939fcb56022f14476ce6e25ea71574a3287d1dda70f141b2a564e4da7",
             ],
             tools: [
-                CompatTool(name: "neutron-highball-x64-crossover26.3-r19", flavor: .rosetta,
+                CompatTool(name: "neutron-proton-highball-x64-crossover26.3-r19", flavor: .rosetta,
                            display: "Highball Wine 11 (r19)"),
             ],
             runtime: .highball
         ),
     ]
+
+    // Alpha 1–5 omitted Steam's required "proton" token. Keep old requests readable;
+    // compat.c migrates the corresponding global and per-game Steam mappings.
+    static func migratedToolName(_ name: String) -> String {
+        name == "neutron-highball-x64-crossover26.3-r19"
+            ? "neutron-proton-highball-x64-crossover26.3-r19" : name
+    }
 
     static func build(loaderSHA256 hash: String) -> RunnerBuild? {
         all.lazy.compactMap { $0.matching(loaderSHA256: hash) }.first

@@ -405,7 +405,7 @@ static void tool_list_cases(void) {
           "neutron-fex-41069\t27.0.0.41069-fex\tfex\tcrossover\tCrossOver Preview 41069 (FEX)\n"
           "neutron-fex-rosetta\t27.0.0.40921-fex\trosetta\tcrossover\tCrossOver Preview (Rosetta)\n"
           "neutron-26.3\t26.3.0.39832\trosetta\tCrossOver 26.3\n"
-          "neutron-highball-x64-crossover26.3-r19\tx64-crossover26.3-r19\trosetta\thighball\tHighball Wine 11 (r19)\n"
+          "neutron-proton-highball-x64-crossover26.3-r19\tx64-crossover26.3-r19\trosetta\thighball\tHighball Wine 11 (r19)\n"
           "neutron\t26.3.0.39832\trosetta\tcrossover\tDuplicate\n"
           "proton-other\t1\trosetta\tcrossover\tForeign\n"
           "neutron-x\t1\tarm\tcrossover\tBad flavor\n"
@@ -568,11 +568,15 @@ static void *stub_find_mapping(void *mgr, uint32_t appid) {
 
 static uint32_t last_priority;
 static uint32_t last_appid;
+static char last_tool_name[64];
+static int accept_mapping;
 static void stub_set_mapping(void *mgr, uint32_t appid, const char *tool_name,
                              const char *config, uint32_t priority) {
     (void)mgr; (void)tool_name; (void)config;
     last_appid = appid;
     last_priority = priority;
+    snprintf(last_tool_name, sizeof(last_tool_name), "%s", tool_name);
+    if (accept_mapping) stub_mapping_entry[0] = last_tool_name;
 }
 
 static void put_text(const char *path, const char *text) {
@@ -596,14 +600,14 @@ static void default_tool_cases(void) {
     check(ensure_dir(library) == 0 && ensure_dir(app_support) == 0 && ensure_dir(support) == 0,
           "the support fixture can be made");
     put_text(list, "neutron-26.3\t26.3.0.39832\trosetta\tcrossover\tCrossOver 26.3\n"
-                   "neutron-highball-x64-crossover26.3-r19\tx64-crossover26.3-r19\trosetta\thighball\tHighball Wine 11 (r19)\n");
+                   "neutron-proton-highball-x64-crossover26.3-r19\tx64-crossover26.3-r19\trosetta\thighball\tHighball Wine 11 (r19)\n");
     check(np_compat_load_tool_list(list, tools_dir) == 2, "the fixture tool list loads both tools");
 
     check(np_compat_default_tool_action(NULL, "neutron-26.3") == NP_DEFAULT_TOOL_KEEP,
           "no request file leaves the default alone");
-    check(np_compat_default_tool_action("neutron-highball-x64-crossover26.3-r19", NULL) == NP_DEFAULT_TOOL_SET,
+    check(np_compat_default_tool_action("neutron-proton-highball-x64-crossover26.3-r19", NULL) == NP_DEFAULT_TOOL_SET,
           "a listed tool is set when Steam has no default");
-    check(np_compat_default_tool_action("neutron-highball-x64-crossover26.3-r19", "proton_9") == NP_DEFAULT_TOOL_SET,
+    check(np_compat_default_tool_action("neutron-proton-highball-x64-crossover26.3-r19", "proton_9") == NP_DEFAULT_TOOL_SET,
           "the switch on replaces another default");
     check(np_compat_default_tool_action("neutron-26.3", "neutron-26.3") == NP_DEFAULT_TOOL_KEEP,
           "a default that already matches is not set again");
@@ -625,17 +629,18 @@ static void default_tool_cases(void) {
     char request[768], status[768];
     snprintf(request, sizeof(request), "%s/default-tool", support);
     snprintf(status, sizeof(status), "%s/steam-default-tool", support);
-    put_text(request, "neutron-highball-x64-crossover26.3-r19\n");
+    put_text(request, LEGACY_HIGHBALL_TOOL "\n");
     last_appid = 7; last_priority = 7;
     check(np_compat_apply_default_tool_in(manager, support) == 1, "a request that changes the default reports a change");
     check(last_appid == 0 && last_priority == COMPAT_MAPPING_PRIORITY_GLOBAL,
           "the request maps app 0 at global priority");
+    check(!strcmp(last_tool_name, CLOUD_HIGHBALL_TOOL), "an alpha-5 request selects the Cloud-compatible tool");
     FILE *f = fopen(status, "r");
     char line[128] = "";
     if (f) { if (!fgets(line, sizeof(line), f)) line[0] = 0; fclose(f); }
     check(strcmp(line, "proton_9\n") == 0, "Steam's default before the change is recorded for the app");
     // Steam took the request; the next run finds it in place and leaves it
-    stub_mapping_entry[0] = "neutron-highball-x64-crossover26.3-r19";
+    stub_mapping_entry[0] = "neutron-proton-highball-x64-crossover26.3-r19";
     last_appid = 7;
     check(np_compat_apply_default_tool_in(manager, support) == 0, "a default that already matches is left alone");
     check(last_appid == 7, "nothing is mapped when the default already matches");
@@ -659,7 +664,7 @@ static void default_tool_cases(void) {
     f = fopen(request, "r");
     line[0] = 0;
     if (f) { if (!fgets(line, sizeof(line), f)) line[0] = 0; fclose(f); }
-    check(strcmp(line, "neutron-highball-x64-crossover26.3-r19\n") == 0,
+    check(strcmp(line, "neutron-proton-highball-x64-crossover26.3-r19\n") == 0,
           "the adoption is recorded as the app's request, so the switch shows on");
     remove(request);
     put_text(list, "neutron-26.3\t26.3.0.39832\trosetta\tcrossover\tCrossOver 26.3\n");
@@ -670,6 +675,36 @@ static void default_tool_cases(void) {
     check(np_compat_apply_default_tool(manager) == 0, "the home-based entry does nothing for a home with no support folder");
 }
 
+static void cloud_mapping_cases(void) {
+    g_tool_shift = 0;
+    uint8_t *mgr = build_manager(1, -1);
+    *(const char **)(entries + COMPAT_TOOL_NAME_OFF) = CLOUD_HIGHBALL_TOOL;
+    np_compat_set_app_mapping_fn((uintptr_t)stub_find_mapping);
+    np_compat_set_mapping_fn((uintptr_t)stub_set_mapping);
+    accept_mapping = 1;
+    for (uint32_t appid = 0; appid <= 1817070; appid += 1817070) {
+        stub_mapping_entry[0] = LEGACY_HIGHBALL_TOOL;
+        check(np_compat_migrate_cloud_mapping(mgr, appid), "legacy Highball mapping migrates");
+        check(last_appid == appid && !strcmp(last_tool_name, CLOUD_HIGHBALL_TOOL),
+              "global and game mappings keep the same Highball engine");
+        check(last_priority == (appid ? COMPAT_MAPPING_PRIORITY_APP : COMPAT_MAPPING_PRIORITY_GLOBAL),
+              "migration preserves global versus per-game priority");
+        check(!np_compat_migrate_cloud_mapping(mgr, appid), "migration is idempotent");
+    }
+    const char *unchanged[] = {NULL, "", "none", "proton_9", "neutron-26.3", "neutron-highball-other"};
+    for (size_t i = 0; i < sizeof(unchanged) / sizeof(*unchanged); i++) {
+        stub_mapping_entry[0] = unchanged[i];
+        check(!np_compat_migrate_cloud_mapping(mgr, 1817070), "unrelated choices are not migrated");
+    }
+    stub_mapping_entry[0] = LEGACY_HIGHBALL_TOOL;
+    *(uint32_t *)(mgr + COMPAT_MANAGER_TOOL_COUNT_OFF) = 0;
+    check(!np_compat_migrate_cloud_mapping(mgr, 1817070), "migration waits for the replacement tool");
+    check(!strcmp(stub_mapping_entry[0], LEGACY_HIGHBALL_TOOL), "an unavailable replacement leaves the choice intact");
+    check(!np_compat_migrate_cloud_mapping(NULL, 1817070), "migration waits for the manager");
+    accept_mapping = 0;
+    stub_mapping_entry[0] = NULL;
+}
+
 static void renderer_list_cases(void) {
     char root[] = "out/compatcheck-renderers.XXXXXX";
     if (!mkdtemp(root)) {
@@ -678,14 +713,14 @@ static void renderer_list_cases(void) {
     }
     char path[768];
     snprintf(path, sizeof(path), "%s/renderers", root);
-    put_text(path, "neutron-highball-x64-crossover26.3-r19\tdxmt,wined3d\n"
+    put_text(path, "neutron-proton-highball-x64-crossover26.3-r19\tdxmt,wined3d\n"
                    "neutron-highball-x64-other\tdxmt,d3dmetal,dxvk,wined3d\n"
                    "not a tool\tdxmt\n"
                    "neutron-broken\n");
     const char *names[16];
     char storage[1024];
     size_t n = np_compat_tools_lacking_in(path, "d3dmetal", names, 16, storage, sizeof(storage));
-    check(n == 1 && strcmp(names[0], "neutron-highball-x64-crossover26.3-r19") == 0,
+    check(n == 1 && strcmp(names[0], "neutron-proton-highball-x64-crossover26.3-r19") == 0,
           "the tool without D3DMetal is reported, the one with it and the malformed lines are not");
     n = np_compat_tools_lacking_in(path, "dxvk", names, 16, storage, sizeof(storage));
     check(n == 1, "the tool without DXVK is reported");
@@ -988,6 +1023,7 @@ int main(void) {
     stale_tool_cases();
     runtime_file_cases();
     default_tool_cases();
+    cloud_mapping_cases();
     renderer_list_cases();
     installed_fn_cases();
     shortcut_probe_cases();

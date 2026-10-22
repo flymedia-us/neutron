@@ -908,6 +908,22 @@
         }
       }
     },
+    "Access needed" : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accesso necessario"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要访问权限"
+          }
+        }
+      }
+    },
     "Advanced" : {
       "localizations" : {
         "it" : {
@@ -936,6 +952,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "允许客户端更新"
+          }
+        }
+      }
+    },
+    "Allow Neutron to update Steam" : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Consenti a Neutron di aggiornare Steam"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许 Neutron 更新 Steam"
+          }
+        }
+      }
+    },
+    "Allow Neutron to update Steam in App Management, then relaunch to continue setup." : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Consenti a Neutron di aggiornare Steam in Gestione app, poi riavvia per continuare la configurazione."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“App 管理”中允许 Neutron 更新 Steam，然后重新启动以继续设置。"
           }
         }
       }
@@ -1624,6 +1672,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在检查 Steam"
+          }
+        }
+      }
+    },
+    "Checking access to update Steam" : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verifica dei permessi per aggiornare Steam"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查更新 Steam 所需的权限"
           }
         }
       }
@@ -2760,6 +2824,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "启用 D3DMetal…"
+          }
+        }
+      }
+    },
+    "Enable Neutron in System Settings → Privacy & Security → App Management. Then return here and choose Relaunch & Continue. Setup will resume automatically." : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Attiva Neutron in Impostazioni di Sistema → Privacy e sicurezza → Gestione app. Poi torna qui e scegli Riavvia e continua. La configurazione riprenderà automaticamente."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“系统设置 → 隐私与安全性 → App 管理”中启用 Neutron。然后返回此处并选择“重新启动并继续”。设置将自动继续。"
           }
         }
       }
@@ -4175,6 +4255,22 @@
         }
       }
     },
+    "Not Now" : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non ora"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂不"
+          }
+        }
+      }
+    },
     "Not installed." : {
       "localizations" : {
         "it" : {
@@ -4875,6 +4971,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新安装"
+          }
+        }
+      }
+    },
+    "Relaunch & Continue" : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Riavvia e continua"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新启动并继续"
           }
         }
       }
@@ -6126,6 +6238,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Steam 中已安装的动态库与当前账户的版本记录不一致。请使用上次执行安装的 Neutron 应用完成或修复安装。"
+          }
+        }
+      }
+    },
+    "Steam's location changed. Start setup again for the selected copy of Steam." : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il percorso di Steam è cambiato. Avvia di nuovo la configurazione per la copia di Steam selezionata."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam 的位置已更改。请为所选的 Steam 重新开始设置。"
           }
         }
       }

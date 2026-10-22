@@ -60,6 +60,14 @@ final class SystemStatus {
     var outcome: String?
     private(set) var failure: String?
     private(set) var failureRemedy: Remedy?
+    private(set) var accessNeeded: SetupAccessRecovery.Request?
+    @ObservationIgnored private let accessRecovery: SetupAccessRecovery
+    @ObservationIgnored private var resumedAccessRequest: SetupAccessRecovery.Request?
+    @ObservationIgnored private var checkedAccessResume = false
+
+    init(accessRecovery: SetupAccessRecovery = SetupAccessRecovery()) {
+        self.accessRecovery = accessRecovery
+    }
 
     private var runInFlight = false
     // Tests replace the refresh so a run does not modify the real Steam/support folders
@@ -77,6 +85,7 @@ final class SystemStatus {
         case blockUpdates
         case removeBuild
         case removeEverything
+        case appManagement
 
         var id: Self { self }
     }
@@ -152,8 +161,8 @@ final class SystemStatus {
             setFailure(String(localized: "Install Rosetta to run Windows games, then try setup again."))
             return
         }
-        await installIntoSteam()
-        guard failure == nil else { return }
+        await installIntoSteam(accessRequest: .init(.setup(acceptD3DMetal: acceptD3DMetal)))
+        guard failure == nil, accessNeeded == nil else { return }
         if let engine = HighballSource.discover().first(where: \.isUsable) {
             if acceptD3DMetal && !engine.d3dmetalAccepted {
                 await enableD3DMetal(engine)
@@ -286,6 +295,7 @@ final class SystemStatus {
 
     func perform(
         from first: String,
+        accessRequest: SetupAccessRecovery.Request? = nil,
         _ body: (_ progress: @escaping @Sendable (String) -> Void) async throws -> String?
     ) async {
         guard !runInFlight else {
@@ -296,19 +306,78 @@ final class SystemStatus {
         defer { runInFlight = false }
 
         clearFailure()
+        if accessRequest != nil {
+            accessNeeded = nil
+            if pendingConfirmation == .appManagement { pendingConfirmation = nil }
+        }
         outcome = nil
         let run = beginRun(first)
         defer { endRun() }
 
         do {
+            if accessRequest != nil { try accessRecovery.clear() }
             outcome = try await body { label in
                 Task { @MainActor in self.report(run, label) }
             }
         } catch {
-            record(error)
+            if !pauseForAppManagement(error, request: accessRequest) { record(error) }
         }
 
         await refreshAfterRun(self)
+    }
+
+    private func pauseForAppManagement(_ error: Error, request: SetupAccessRecovery.Request?) -> Bool {
+        guard let refusal = error as? WriteRefused, refusal.remedy == .appManagement,
+              let request, request != resumedAccessRequest else { return false }
+        do {
+            try accessRecovery.save(request)
+        } catch {
+            record(error)
+            return true
+        }
+        accessNeeded = request
+        pendingConfirmation = .appManagement
+        AppLog.note("setup paused: App Management access is needed; resume after relaunch")
+        return true
+    }
+
+    func resumeSetupAfterRelaunch(
+        steam: URL = SupportPaths.Steam.app,
+        run: ((SetupAccessRecovery.Request) async -> Void)? = nil
+    ) async {
+        guard !checkedAccessResume, isIdle else { return }
+        checkedAccessResume = true
+        do {
+            guard let request = try accessRecovery.take() else { return }
+            guard request.steamPath == steam.standardizedFileURL.path(percentEncoded: false) else {
+                setFailure(String(localized: "Steam's location changed. Start setup again for the selected copy of Steam."))
+                return
+            }
+            resumedAccessRequest = request
+            defer { resumedAccessRequest = nil }
+            if let run {
+                await run(request)
+            } else {
+                switch request.action {
+                case .setup(let accepted): await setUpNeutron(acceptD3DMetal: accepted)
+                case .install: await installIntoSteam(accessRequest: request)
+                }
+            }
+        } catch {
+            record(error)
+        }
+    }
+
+    func relaunchForAppManagement() {
+        guard accessNeeded != nil, isIdle else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
+            Task { @MainActor in
+                if let error { self.setFailure(error) }
+                else { NSApplication.shared.terminate(nil) }
+            }
+        }
     }
 
     func setUpHighball(_ engine: HighballEngine, replacingExisting: Bool = false) async {
@@ -448,8 +517,8 @@ final class SystemStatus {
         }
     }
 
-    func installIntoSteam() async {
-        await perform(from: InstallPhase.checkingPayload.label) { progress in
+    func installIntoSteam(accessRequest: SetupAccessRecovery.Request = .init(.install)) async {
+        await perform(from: InstallPhase.checkingPayload.label, accessRequest: accessRequest) { progress in
             let lock = try DeploymentContent.acquireInstallationLock()
             defer { lock.release() }
             let result = try await Task.detached(priority: .userInitiated) {
