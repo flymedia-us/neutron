@@ -16,7 +16,9 @@ show_sidebar = False
 show_icon_preview = False
 include_icon_view_settings = True
 default_view = 'icon-view'
-window_rect = ((200, 120), (660, 400))
+# Leave room for Finder's global path/status bars when user preferences override
+# the per-image visibility settings. All instructions fit in the first 400 points.
+window_rect = ((200, 120), (660, 480))
 icon_size = 128
 text_size = 12
 label_pos = 'bottom'
