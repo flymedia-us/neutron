@@ -2,6 +2,9 @@
 # Adapted from Fly Media AppleTree's DMG packaging (GPLv3).
 # Packages an already signed app without changing anything inside its resource seal.
 set -euo pipefail
+# The release caller uses 077 for private credentials. This subprocess only
+# handles public installer files, which must be readable on other Macs.
+umask 022
 if [ "$#" -ne 2 ]; then echo "usage: $0 <Neutron.app> <output.dmg>" >&2; exit 2; fi
 root=$(cd "$(dirname "$0")/.." && pwd)
 app=$1
