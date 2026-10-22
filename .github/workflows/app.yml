@@ -44,7 +44,7 @@ jobs:
       - name: Clone Dobby at the pinned commit
         run: |
           git clone --no-checkout https://github.com/jmpews/Dobby.git vendor/dobby
-          git -C vendor/dobby checkout $DOBBY_COMMIT
+          git -C vendor/dobby checkout "$DOBBY_COMMIT"
 
       - name: Restore Dobby build cache
         id: dobby-cache
@@ -99,6 +99,7 @@ jobs:
         run: |
           brew install fontforge gpatch
           python3 -m venv scratch/fontvenv
+          # shellcheck disable=SC2086 # FONT_TOOLS is a pinned list of requirements.
           scratch/fontvenv/bin/pip install $FONT_TOOLS
           echo "$PWD/scratch/fontvenv/bin" >> "$GITHUB_PATH"
 
@@ -116,6 +117,9 @@ jobs:
 
       - name: Check the translations
         run: make -s l10ncheck
+
+      - name: Check drag-to-Applications DMG packaging
+        run: bash scripts/package-dmg.sh out/Neutron.app out/Neutron-test.dmg
 
       - name: Run the hermetic C suites
         run: |

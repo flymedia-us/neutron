@@ -25,7 +25,7 @@ def main():
         subprocess.run(['gh', 'secret', 'set', name, '--repo', 'flymedia-us/neutron',
                         '--env', 'release'], input=value, check=True)
         print('Configured ' + name)
-    print('Apple API credentials configured. Push a reviewed version tag to build and notarize.')
+    print('Apple API credentials configured. New versions merged into main build and publish automatically.')
 
 
 if __name__ == '__main__':

@@ -71,6 +71,7 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     validate = sub.add_parser('validate')
     validate.add_argument('tag')
+    sub.add_parser('pending-tag')
     item = sub.add_parser('item')
     item.add_argument('app', type=pathlib.Path)
     item.add_argument('archive', type=pathlib.Path)
@@ -81,15 +82,22 @@ def main():
     feed.add_argument('output', type=pathlib.Path)
     feed.add_argument('--previous', type=pathlib.Path)
     args = parser.parse_args()
-    if args.command == 'validate':
+    if args.command in ('validate', 'pending-tag'):
         version = version_from_source()
-        if args.tag != f'v{version}':
+        tag = f'v{version}'
+        if args.command == 'validate' and args.tag != tag:
             raise ValueError('The release tag must match dylib/version.h exactly.')
         subprocess.run(['git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'], check=True)
         if subprocess.check_output(['git', 'status', '--porcelain'], text=True).strip():
             raise ValueError('Releases require a clean source checkout.')
-        print(json.dumps({'version': version, 'prerelease': '-' in version,
-                          'build': subprocess.check_output(['git', 'rev-list', '--count', 'HEAD'], text=True).strip()}))
+        result = {'version': version, 'prerelease': '-' in version,
+                  'build': subprocess.check_output(['git', 'rev-list', '--count', 'HEAD'], text=True).strip()}
+        if args.command == 'pending-tag':
+            existing = subprocess.run(['git', 'rev-parse', '--verify', f'refs/tags/{tag}^{{commit}}'],
+                                      capture_output=True, text=True)
+            head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+            result.update(tag=tag, pending=existing.returncode != 0 or existing.stdout.strip() == head)
+        print(json.dumps(result))
     elif args.command == 'item':
         info = plistlib.loads((args.app / 'Contents/Info.plist').read_bytes())
         ET.ElementTree(release_item(info, args.archive, args.signature)).write(args.output, encoding='utf-8', xml_declaration=True)

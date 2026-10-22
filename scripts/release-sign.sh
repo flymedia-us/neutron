@@ -9,7 +9,9 @@ for name in DEVELOPER_ID_P12_BASE64 DEVELOPER_ID_P12_PASSWORD APP_STORE_CONNECT_
 done
 work=$(mktemp -d)
 keychain="$work/release.keychain-db"
+mounted=0
 cleanup() {
+  if [ "$mounted" = 1 ]; then hdiutil detach -force "$work/mount" >/dev/null 2>&1 || true; fi
   security delete-keychain "$keychain" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -56,6 +58,35 @@ spctl --assess --type execute --verbose=2 "$app"
 rm release/Neutron.zip
 ditto -c -k --sequesterRsrc --keepParent "$app" release/Neutron.zip
 cp "$app/Contents/Resources/Licenses/SOURCE.json" release/SOURCE.json
+# Keep the authenticated ZIP for Sparkle; first-time installs use a drag-and-drop DMG.
+dmg="release/Neutron-$RELEASE_VERSION.dmg"
+bash scripts/package-dmg.sh "$app" "$dmg"
+identity=$(python3 -c 'import runpy; print(runpy.run_path("scripts/sign-app.py")["team_identity"]("BJZSH247Q9", True) or "")')
+test -n "$identity"
+codesign --force --timestamp --sign "$identity" "$dmg"
+xcrun notarytool submit "$dmg" --key "$work/AuthKey.p8" \
+  --key-id "$APP_STORE_CONNECT_KEY_ID" --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+  --wait --timeout 30m --output-format json > "$work/dmg-notary.json"
+python3 - "$work/dmg-notary.json" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1]))
+if result.get('status') != 'Accepted':
+    sys.exit('Apple did not accept DMG notarization; no release will be published. Submission: ' + result.get('id', 'unknown'))
+print('Apple accepted DMG notarization.')
+PY
+xcrun stapler staple "$dmg"
+xcrun stapler validate "$dmg"
+codesign --verify --strict "$dmg"
+spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+mkdir "$work/mount"
+hdiutil attach -readonly -nobrowse -mountpoint "$work/mount" "$dmg" > /dev/null
+mounted=1
+test "$(readlink "$work/mount/Applications")" = /Applications
+codesign --verify --deep --strict "$work/mount/Neutron.app"
+xcrun stapler validate "$work/mount/Neutron.app"
+spctl --assess --type execute --verbose=2 "$work/mount/Neutron.app"
+hdiutil detach "$work/mount"
+mounted=0
 # Download the exact Sparkle distribution pinned in Package.resolved. The app
 # framework itself was already checked against SwiftPM's archive checksum.
 sparkle_version=$(python3 -c 'import json; print(next(p["state"]["version"] for p in json.load(open("app/Package.resolved"))["pins"] if p["identity"] == "sparkle"))')
@@ -79,4 +110,4 @@ signature=$("$work/bin/sign_update" --ed-key-file "$work/sparkle.key" -p release
 # used to sign it. A misconfigured pair must fail before publishing.
 swift scripts/verify-update.swift release/Neutron.zip "$signature" "$SPARKLE_PUBLIC_KEY"
 python3 scripts/release-metadata.py item "$app" release/Neutron.zip "$signature" release/item.xml
-(cd release && shasum -a 256 Neutron.zip SOURCE.json > SHA256SUMS)
+(cd release && shasum -a 256 "Neutron-$RELEASE_VERSION.dmg" Neutron.zip SOURCE.json > SHA256SUMS)

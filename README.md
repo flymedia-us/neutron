@@ -8,7 +8,7 @@ Neutron is a fork of NotProton by [NotProtonNot](https://github.com/NotProtonNot
 
 You need an Apple Silicon Mac, macOS 15 or later, Steam for macOS, and Rosetta 2.
 
-1. Download `Neutron.zip` from this repository's Releases and move `Neutron.app` to Applications. Until a release is published, build from source below or use a successful Actions build artifact.
+1. Download the **Neutron DMG** from [Releases](https://github.com/flymedia-us/neutron/releases), open it, and drag **Neutron** into **Applications**.
 2. Open Neutron. Official releases use Fly Media Developer ID signing and Apple notarization. Development and Actions artifacts are ad hoc signed and may require **Privacy & Security → Open Anyway**. Allow App Management when requested, because Neutron patches Steam.
 3. On **Home**, click **Set Up Neutron**. Setup closes Steam for you. If prompted, read Apple's D3DMetal license and choose whether to accept it. A previously accepted license is reused. Neutron installs the Steam integration, downloads or reuses Highball's engine, verifies its downloads, and selects its compatibility tool as the Windows-game default on first setup. Later repairs preserve your explicit default-tool choice. No separate Highball app is needed.
 4. When Home says **You're ready to play**, click **Open Steam**. Windows-only games show Play. For a game with a native Mac version, select Neutron's Highball tool under **Properties → Compatibility** to use the Windows version.
@@ -69,7 +69,7 @@ make app-flymedia
 make app-tests seedcheck envcheck settingscheck bridgecheck gamedrivecheck launchercheck brandcheck synccheck
 ```
 
-The full app workflow builds and packages `Neutron.zip`. The release workflow runs automatically on reviewed `v*` tags, signs with Fly Media Developer ID, notarizes and staples the app, and publishes versioned releases plus the Sparkle feed on GitHub. It fails if distribution credentials are missing. Alpha/beta/RC versions are marked as prereleases. See [RELEASING.md](RELEASING.md) for the one-time setup and release procedure. Neutron does not reuse another publisher's update-signing key or Homebrew tap.
+The full app workflow builds and packages `Neutron.zip`. When a new version in `dylib/version.h` reaches reviewed `main`, GitHub Actions automatically creates its tag, runs the release build, signs with Fly Media Developer ID, notarizes and staples the app and DMG, and publishes the DMG plus the Sparkle update feed on GitHub. No manual tagging or publishing command is needed. Existing versions are not republished by ordinary code or documentation updates. It fails if distribution credentials are missing. Alpha/beta/RC versions are marked as prereleases. See [RELEASING.md](RELEASING.md) for the one-time setup and release procedure. Neutron does not reuse another publisher's update-signing key or Homebrew tap.
 
 ## Changes from upstream
 
