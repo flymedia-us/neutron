@@ -21,9 +21,24 @@ def module(name):
 
 metadata = module('release-metadata')
 updater = module('configure-updater')
+configuration = module('check-release-config')
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_release_preflight_reports_names_without_disclosing_credentials(self):
+        self.assertEqual(len(configuration.errors({})), len(configuration.NAMES))
+        values = {name: 'secret-do-not-print' for name in configuration.NAMES}
+        values['DEVELOPER_ID_P12_BASE64'] = base64.b64encode(b'certificate fixture').decode()
+        values['SPARKLE_PRIVATE_KEY'] = base64.b64encode(bytes(32)).decode()
+        values['SPARKLE_PUBLIC_KEY'] = base64.b64encode(bytes(32)).decode()
+        values['APP_STORE_CONNECT_API_KEY'] = '-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----'
+        self.assertEqual(configuration.errors(values), [])
+        values['SPARKLE_PRIVATE_KEY'] = 'secret-do-not-print'
+        values['APP_STORE_CONNECT_API_KEY'] = base64.b64encode(b'private fixture').decode()
+        problems = configuration.errors(values)
+        self.assertEqual(len(problems), 2)
+        self.assertNotIn('secret-do-not-print', '\n'.join(problems))
+
     def setUp(self):
         self.work = tempfile.TemporaryDirectory()
         self.addCleanup(self.work.cleanup)

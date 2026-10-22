@@ -1,7 +1,7 @@
 {
   "primary": {
     "repository": "NotProtonNot/NotProton",
-    "commit": "279167917dc6d0a84fb0305b0c88b11603c4bf92",
+    "commit": "730f10055b851e7f8ba69bf1249acc1583d2108e",
     "version": "1.2.0",
     "sync": "scripts/sync/notproton.sh"
   },
@@ -12,7 +12,7 @@
   },
   "runtime": {
     "repository": "gauthierpiarrette/highball",
-    "version": "0.10.15",
+    "version": "0.10.22",
     "engine": "x64-crossover26.3-r19"
   }
 }

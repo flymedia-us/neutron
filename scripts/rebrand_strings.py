@@ -14,11 +14,14 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SOURCES = ROOT / "app/Sources/NotProtonApp"
 CATALOG = SOURCES / "Resources/Localization/Localizable.xcstrings"
-WORD = re.compile(r"NotProton(?![A-Za-z_])")
+WORD = re.compile(r"(?<!/)NotProton(?![A-Za-z_])")
 STRING_LITERAL = re.compile(r'"(?:[^"\\\n]|\\.)*"')
 
 
 def rename(text: str) -> str:
+    # Upstream credits name the original project and its repository intentionally.
+    if "NotProtonNot" in text:
+        return text
     return WORD.sub("Neutron", text)
 
 

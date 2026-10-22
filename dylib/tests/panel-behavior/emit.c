@@ -43,6 +43,10 @@ int main(int argc, char **argv) {
                                                     : NP_CX_OPTIONS_STATEMENT);
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "prefix-row") == 0) {
+        fputs(NP_CX_PREFIX_ROW, stdout);
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "migration") == 0) {
         fputs(NP_LAUNCH_MIGRATION, stdout);
         return 0;
@@ -55,7 +59,15 @@ int main(int argc, char **argv) {
         fputs(NP_IMAGE_FILES_LABEL, stdout);
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "library-windows-hint") == 0) {
+        fputs(NP_LIBRARY_WINDOWS_HINT, stdout);
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "library-windows-summary") == 0) {
+        fputs(NP_LIBRARY_WINDOWS_SUMMARY, stdout);
+        return 0;
+    }
     fputs("usage: emit component|statement [fallback [fex-tool...]]|migration|compat-hint|"
-          "image-files-label\n", stderr);
+          "image-files-label|library-windows-hint|library-windows-summary|prefix-row\n", stderr);
     return 2;
 }

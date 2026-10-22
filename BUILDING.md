@@ -1,6 +1,7 @@
 # Building Neutron
 
 Use the toolchain and dependency pins in `README.md` and `.github/workflows/app.yml`.
+Install Rosetta 2 before building the x86_64 bridge on an Apple Silicon Mac.
 Build on a branch and submit a PR; `main` requires successful app and shell checks.
 
 ## Fly Media signing on a Mac
@@ -23,12 +24,12 @@ The regular `make app` also selects the company's identity when available, but
 falls back to ad hoc signing on contributors' Macs. CI explicitly selects
 `APP_SIGN_ID=-`; CI artifacts do not contain or use Fly Media's private keys.
 
-The configured Mac currently has an **Apple Development** identity and no valid **Developer ID Application** identity.
-A development signature identifies the company for local testing; it does not
-make an app a notarized public distribution. Public Gatekeeper-friendly releases
-need a **Developer ID Application** signature and Apple's notarization process.
-See [RELEASING.md](RELEASING.md) for GitHub release automation and [Apple's distribution guidance](https://developer.apple.com/developer-id/).
-Do not label development or ad hoc artifacts as notarized releases.
+The local Mac verified on 2026-10-21 has the **Developer ID Application: Fly Media LLC
+(BJZSH247Q9)** identity, SHA-1 `120D2200993750D65F7CC0BC117EDE47DEA94AEC`.
+The signer prefers this identity when available. Verify it with
+`security find-identity -v -p codesigning` before a distribution build.
+A Developer ID signature alone is not notarization. Public Gatekeeper-friendly
+releases also need Apple's notarization process. See [RELEASING.md](RELEASING.md).
 
 No new Apple certificates are created by these build scripts. Signing or
 notarization credentials must never be committed or uploaded in build logs.

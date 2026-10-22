@@ -2012,6 +2012,22 @@
         }
       }
     },
+    "Copying your files…" : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Copying your files…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Copying your files…"
+          }
+        }
+      }
+    },
     "Could not check installed files." : {
       "localizations" : {
         "it" : {
@@ -2920,6 +2936,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在完成收尾工作"
+          }
+        }
+      }
+    },
+    "Finishing…" : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Finishing…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Finishing…"
           }
         }
       }
@@ -3919,6 +3951,38 @@
         }
       }
     },
+    "Neutron is rebuilding the prefix for %@." : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Neutron is rebuilding the prefix for %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Neutron is rebuilding the prefix for %@."
+          }
+        }
+      }
+    },
+    "Neutron is rebuilding this game's prefix." : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Neutron is rebuilding this game's prefix."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Neutron is rebuilding this game's prefix."
+          }
+        }
+      }
+    },
     "Neutron needs Highball's Wine 11 engine. Switch an environment to Wine 11 in its settings in Highball." : {
       "localizations" : {
         "it" : {
@@ -4635,6 +4699,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重建“%@”的游戏容器%@？"
+          }
+        }
+      }
+    },
+    "Rebuilding the prefix" : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rebuilding the prefix"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rebuilding the prefix"
+          }
+        }
+      }
+    },
+    "Rebuilding…" : {
+      "localizations" : {
+        "it" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rebuilding…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rebuilding…"
           }
         }
       }

@@ -19,6 +19,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       build: ${{ steps.version.outputs.build }}
       prerelease: ${{ steps.version.outputs.prerelease }}
+    environment: release
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -31,6 +32,16 @@ jobs:
         run: |
           python3 scripts/release-metadata.py validate "$RELEASE_TAG" > "$RUNNER_TEMP/version.json"
           jq -r 'to_entries[] | "\(.key)=\(.value)"' "$RUNNER_TEMP/version.json" >> "$GITHUB_OUTPUT"
+      - name: Check release credentials before building
+        env:
+          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
+        run: python3 scripts/check-release-config.py
   build:
     needs: validate
     uses: ./.github/workflows/app.yml

@@ -8,7 +8,8 @@ A push of a `v*` tag starts `.github/workflows/release.yml`. The tag must exactl
 match `dylib/version.h`, point to a commit in reviewed `main`, and use `X.Y.Z` or
 `X.Y.Z-alpha.N`, `-beta.N`, or `-rc.N`. Upstream sync never creates release tags.
 
-The workflow validates the source, runs the full app CI build and tests, and then
+The workflow validates the source and release credential formats before compiling,
+runs the full app CI build and tests, and then
 imports signing credentials into a temporary Keychain on a GitHub-hosted Mac.
 It verifies every Mach-O file belongs to Fly Media and carries Developer ID
 Application signing with hardened runtime. Nested Sparkle helper apps, XPC
@@ -27,8 +28,9 @@ those source files are unavailable, recover the identity from the Mac that has
 its private key or create replacement credentials. Do not revoke AppleTree's
 working credentials as part of setting up Neutron.
 
-The local Mac inspected on 2026-10-19 had only an Apple Development identity;
-this does not mean Fly Media lacks a Developer ID certificate elsewhere.
+The local Mac verified on 2026-10-21 has the Fly Media Developer ID Application
+identity `120D2200993750D65F7CC0BC117EDE47DEA94AEC`. Its private key remains in
+Keychain unless explicitly exported for CI.
 
 1. In Fly Media's Apple Developer account, create or obtain a **Developer ID
    Application** certificate, with its private key available in Keychain. Use
@@ -97,6 +99,20 @@ provisioning-profile secrets into Neutron; those serve AppleTree's separate
 App Store pipeline.
 
 ## Upload the credentials without exposing them
+
+To reuse AppleTree's Apple API key, use the original `.p8` file, key ID and issuer
+ID. This uploads only those three values to Neutron's `release` environment and
+never prints the key:
+
+```sh
+python3 scripts/setup-apple-api.py /path/to/AuthKey_EXISTING.p8 --key-id EXISTING_KEY_ID --issuer-id EXISTING_ISSUER_ID
+```
+
+GitHub cannot copy secret values back out of AppleTree. An organization secret
+shared with both repositories is another option if you still have its value.
+The Developer ID certificate/password and Neutron's Sparkle key pair must also
+be configured as described above; the API key alone cannot sign the app.
+
 
 In [Neutron Settings → Environments → release](https://github.com/flymedia-us/neutron/settings/environments),
 add the six secrets from the table and the public `SPARKLE_PUBLIC_KEY` variable.
