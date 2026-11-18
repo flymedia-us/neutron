@@ -106,7 +106,8 @@ for (const form of Object.keys(FORMS)) {
     failed += t.failed;
   }
 
-  const { render: L } = panel(emit, form, undefined, { fexTools: ['neutron-fex-41069'] });
+  const { render: L } = panel(emit, form, undefined,
+                              { tools: ['neutron-fex'], fexTools: ['neutron-fex-41069'] });
   const tp = runner(`${form}, FEX tool name prefix`);
   const pr = walk(L({ details: details('', { strCompatToolName: 'neutron-fex' }) }));
   tp.ok(pr.find(x => x.type === 'Dropdown').props.rgOptions.some(o => o.data === 'd3dmetal'),

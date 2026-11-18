@@ -7,10 +7,11 @@ const emit = process.argv[2];
 if (!emit) { console.error('usage: renderer-gaps.js <emit>'); process.exit(2); }
 
 const HB = 'neutron-proton-highball-x64-crossover26.3-r19';
+const tools = [HB, 'neutron-26.3'];
 
 let failed = 0;
 for (const form of Object.keys(FORMS)) {
-  const { render: P } = panel(emit, form, undefined, { noD3DMetal: [HB], noDXVK: [HB] });
+  const { render: P } = panel(emit, form, undefined, { tools, noD3DMetal: [HB], noDXVK: [HB] });
   const t = runner(`${form}, renderer gaps`);
   const nodes = (opts, tool) => walk(P({ details: details(opts + ' %command%', { strCompatToolName: tool }) }));
   const dropdown = ns => ns.find(x => x.type === 'Dropdown' && x.props.rgOptions.some(o => o.data === 'wined3d'));
@@ -32,7 +33,7 @@ for (const form of Object.keys(FORMS)) {
   r = nodes('CX_GRAPHICS_BACKEND=d3dmetal', 'neutron-26.3');
   t.ok(dropdown(r).props.selectedOption === 'd3dmetal', 'a CrossOver game keeps its D3DMetal choice');
 
-  const { render: Q } = panel(emit, form);
+  const { render: Q } = panel(emit, form, undefined, { tools });
   r = walk(Q({ details: details(' %command%', { strCompatToolName: HB }) }));
   t.ok(backends(r).includes('d3dmetal') && backends(r).includes('dxvk'), 'without gaps the Highball tool offers everything');
   failed += t.failed;
