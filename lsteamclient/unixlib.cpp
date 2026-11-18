@@ -352,6 +352,20 @@ static NTSTATUS steamclient_Steam_BGetCallback( Params *params, bool wow64 )
     return 0;
 }
 
+#ifdef __APPLE__
+/* winemac sadly doesn't honor __wine_steamclient_GameOverlayActivated, soo... */
+static void notify_overlay_shim( const u_CallbackMsg_t *u_msg )
+{
+    void (*set_active)( int );
+
+    if (u_msg->m_iCallback != 0x14b /* GameOverlayActivated_t::k_iCallback */ || u_msg->m_cubParam < 1)
+        return;
+
+    if ((set_active = (void (*)( int ))dlsym( RTLD_DEFAULT, "np_overlay_shim_set_active" )))
+        set_active( *(const uint8_t *)u_msg->m_pubParam );
+}
+#endif /* __APPLE__ */
+
 template< typename Params >
 static NTSTATUS steamclient_callback_message_receive( Params *params, bool wow64 )
 {
@@ -359,6 +373,10 @@ static NTSTATUS steamclient_callback_message_receive( Params *params, bool wow64
     auto *w_msg = &*params->w_msg;
 
     if (!u_msg) return 0;
+
+#ifdef __APPLE__
+    notify_overlay_shim( u_msg );
+#endif
 
     convert_callback_utow( u_msg->m_iCallback, (void *)u_msg->m_pubParam,
                            u_msg->m_cubParam, (void *)w_msg->m_pubParam,
@@ -985,16 +1003,12 @@ static void collapse_path( WCHAR *path, UINT mark )
 static char *get_unix_file_name( const WCHAR *path )
 {
     NTSTATUS status;
-    ULONG size = 256;
-    char *buffer;
+    char *buffer = NULL;
 
+    /* ntdll frees its own buffer on failure and leaves this unset */
     status = ntdll_get_unix_file_name( path, &buffer, FILE_OPEN_IF );
 
-    if (status && status != STATUS_NO_SUCH_FILE)
-    {
-        free( buffer );
-        return NULL;
-    }
+    if (status && status != STATUS_NO_SUCH_FILE) return NULL;
     return buffer;
 }
 
@@ -1043,11 +1057,7 @@ char *steamclient_dos_to_unix_path( const char *src, int is_url )
 
     if (is_url)
     {
-        if (strncmp( src, file_prot, 7 ) != 0)
-        {
-            strcpy( dst, src );
-            goto done;
-        }
+        if (strncmp( src, file_prot, 7 ) != 0) return strdup( src );
 
         src += 7;
         memcpy( dst, file_prot, sizeof(file_prot) );
@@ -1068,7 +1078,7 @@ char *steamclient_dos_to_unix_path( const char *src, int is_url )
         r = ntdll_umbstowcs( src, file_part_len, srcW + 4, PATH_MAX - 4 - 1 );
         if (r)
         {
-            srcW[4 + file_part_len] = 0;
+            srcW[4 + r] = 0;
             if (is_url) url_unescape( srcW + 4 );
             collapse_path( srcW, 4 );
             unix_path = get_unix_file_name( srcW );
@@ -1099,7 +1109,7 @@ char *steamclient_dos_to_unix_path( const char *src, int is_url )
         const char *s;
         char *d;
 
-        for (s = src, d = dst; *s; ++s, ++d)
+        for (s = src, d = dst; *s && d < buffer + sizeof(buffer) - 1; ++s, ++d)
         {
             if (*s == '\\') *d = '/';
             else *d = *s;
@@ -1173,13 +1183,15 @@ const char **wow64_steamclient_dos_to_unix_path_array( ptr32< const char ** > sr
     ptr32< const char * > *ptr = src_array, *end = src_array;
     const char **array, **ret;
 
+    if (!ptr) return NULL;
     while (*end) end++;
     array = new const char *[end - ptr + 1];
     for (end = ptr; *end; end++) array[end - ptr] = *end;
+    array[end - ptr] = NULL;
 
     ret = steamclient_dos_to_unix_path_array( array );
 
-    delete array;
+    delete[] array;
     return ret;
 }
 

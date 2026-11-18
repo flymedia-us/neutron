@@ -71,8 +71,15 @@ pins[0]['state'] = {'version': sys.argv[1], 'revision': sys.argv[2]}
 # A manifest change invalidates SwiftPM's originHash. Let read-only CI regenerate it.
 data.pop('originHash', None)
 path.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n')
+
+upstreams = pathlib.Path('UPSTREAMS.json')
+if upstreams.is_file():
+    metadata = json.loads(upstreams.read_text())
+    metadata['runtime']['version'] = sys.argv[1]
+    upstreams.write_text(json.dumps(metadata, indent=2) + '\n')
 PY
   git add app/Package.swift app/Package.resolved app/Sources/HighballEnvCore/HighballEnvCore.swift
+  [ ! -f UPSTREAMS.json ] || git add UPSTREAMS.json
   notes="$notes- HighballKit $pinned → $newer_kit: https://github.com/gauthierpiarrette/highball/releases/tag/v$newer_kit
 "
 fi

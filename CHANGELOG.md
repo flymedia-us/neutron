@@ -2,6 +2,12 @@
 
 Neutron modification and integration history. See [UPSTREAMS.json](UPSTREAMS.json) for the pinned sources.
 
+- 2026-11-18: Sync NotProton 1.2.6 through `59ab48b`, including default compatibility settings, per-game plugins, runner variants, the Winetricks catalog, executable selection, and macOS Games integration. Preserve Neutron’s guided setup, Steam Auto-Cloud mapping, and independent display and UI scaling.
+
+- 2026-11-18: Update HighballKit to 0.10.26 and highball-db to `bc72f85` (893 games / 47 recipes). Apply compatible recipe frame caps and log the resolved Highball settings. Add Wine 11 r31 as the offered download and retain r19 support.
+
+- 2026-11-18: Keep the Neutron release version independent of automated NotProton merges and reuse review issues as upstream changes accumulate.
+
 - 2026-10-22: Refresh highball-db to `a5fbc49` (540 games / 39 recipes), incorporating the latest compatibility reports and game entries. HighballKit remains at 0.10.22 and the verified runtime remains r19; newer engine integration is tracked separately.
 
 - 2026-10-22: Alpha 6 checks access before updating Steam. When App Management permission is needed, setup opens a guided prompt, remembers the requested setup, and resumes once after relaunch before reporting a permission failure.

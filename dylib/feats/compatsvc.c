@@ -14,11 +14,14 @@
 
 #include "compatsvc.h"
 #include "compat.h"
+#include "defaults.h"
 #include "prefixstate.h"
 #include "webui.h"
+#include "webpatch.h"
 #include "../resolver/anchor.h"
 #include "../util/file.h"
 #include "../util/log.h"
+#include "../util/spawn.h"
 
 // Route names carry the interface version the page asks for.
 #define ROUTE_GET_COMPAT_TOOLS     "CompatManager.GetCompatTools#1"
@@ -30,6 +33,10 @@
 #define ROUTE_REBUILD              "NotProton.RebuildPrefix#1"
 #define ROUTE_BACKUP_REBUILD       "NotProton.BackupAndRebuildPrefix#1"
 #define ROUTE_OPEN_LOG             "NotProton.OpenPrefixLog#1"
+#define ROUTE_SET_DEFAULTS         "NotProton.SetDefaults#1"
+#define ROUTE_SET_TOOL_DEFAULTS    "NotProton.SetToolDefaults#1"
+#define ROUTE_APPLY_TOOL_DEFAULTS  "NotProton.ApplyToolDefaults#1"
+#define ROUTE_SET_SHOW_ALL         "NotProton.SetShowAllPlugins#1"
 
 // Mangled RTTI names of the message types. A client that builds the CompatManager
 // page compiles these without registering the service, so the vtables are there to
@@ -372,22 +379,14 @@ static int run_detached(char *const argv[]) {
 
     posix_spawn_file_actions_t actions;
     posix_spawnattr_t attr;
-    sigset_t none, all;
-    sigemptyset(&none);
-    sigfillset(&all);
     if (posix_spawn_file_actions_init(&actions) != 0) return 0;
-    if (posix_spawnattr_init(&attr) != 0) {
+    if (np_spawn_attr_clean(&attr, NP_SPAWN_OWN_GROUP) != 0) {
         posix_spawn_file_actions_destroy(&actions);
         return 0;
     }
     posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
     posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
     posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
-    posix_spawnattr_setsigmask(&attr, &none);
-    posix_spawnattr_setsigdefault(&attr, &all);
-    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF |
-                                    POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETPGROUP);
-    posix_spawnattr_setpgroup(&attr, 0);
     pid_t pid;
     int rc = posix_spawn(&pid, argv[0], &actions, &attr, argv, envp);
     posix_spawnattr_destroy(&attr);
@@ -481,6 +480,66 @@ static int open_prefix_log(uintptr_t request, uintptr_t response) {
     return answer_json(response, appid, opened ? "{\"opened\":true}" : "{\"error\":\"log\"}");
 }
 
+static int set_defaults(uintptr_t request, uintptr_t response) {
+    uint32_t has_bits = *(const uint32_t *)(request + REQ_HAS_BITS_OFF);
+    uint32_t runner   = (has_bits & SPECIFY_HAS_APPID)
+                      ? *(const uint32_t *)(request + SPECIFY_APPID_OFF) : 0;
+    (void)response;
+    return np_defaults_save(runner, string_field(request + SPECIFY_TOOL_NAME_OFF))
+        ? RESULT_OK : RESULT_FAIL;
+}
+
+static int tool_build(const char *tool, size_t n, char *build, size_t size, uint32_t *runner) {
+    np_compat_tool_info_t info;
+    if (np_compat_tool_by_name(tool, n, &info) && info.build && strlen(info.build) < size) {
+        snprintf(build, size, "%s", info.build);
+        *runner = info.fex ? NP_DEFAULTS_FEX : NP_DEFAULTS_ROSETTA;
+        return 1;
+    }
+    NP_ERR("compatsvc: %.*s is not an installed CrossOver tool", (int)(n > 128 ? 128 : n), tool);
+    return 0;
+}
+
+static int set_tool_defaults(uintptr_t request, uintptr_t response) {
+    const char *text = string_field(request + SPECIFY_TOOL_NAME_OFF), *nl = strchr(text, '\n');
+    char build[NP_BUILD_ID_MAX + 1];
+    uint32_t runner;
+    (void)response;
+    if (!tool_build(text, nl ? (size_t)(nl - text) : strlen(text), build, sizeof build, &runner))
+        return RESULT_FAIL;
+    return np_defaults_save_build(build, runner, nl ? nl + 1 : "") ? RESULT_OK : RESULT_FAIL;
+}
+
+static int apply_tool_defaults(uintptr_t request, uintptr_t response) {
+    const char *tool = string_field(request + SPECIFY_TOOL_NAME_OFF);
+    char build[NP_BUILD_ID_MAX + 1];
+    uint32_t runner;
+    (void)response;
+    if (!tool_build(tool, strlen(tool), build, sizeof build, &runner)) return RESULT_FAIL;
+    int done = np_defaults_apply_build(build, runner);
+    return done > 0 ? RESULT_OK : done < 0 ? NP_COMPATSVC_PARTLY_APPLIED : RESULT_FAIL;
+}
+
+static int set_show_all(uintptr_t request, uintptr_t response) {
+    uint32_t has_bits = *(const uint32_t *)(request + REQ_HAS_BITS_OFF);
+    uint32_t on       = (has_bits & SPECIFY_HAS_APPID)
+                      ? *(const uint32_t *)(request + SPECIFY_APPID_OFF) : 0;
+    const char *home  = np_home_dir();
+    char path[PATH_MAX];
+    (void)response;
+    if (!home) return RESULT_FAIL;
+    np_support_path(path, sizeof path, home, NP_SHOW_ALL_PLUGINS_FILE);
+    if (on) {
+        int fd = open(path, O_WRONLY | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0644);
+        if (fd < 0) return RESULT_FAIL;
+        close(fd);
+    } else if (unlink(path) != 0 && errno != ENOENT) {
+        return RESULT_FAIL;
+    }
+    NP_LOG("compatsvc: plugins made for other games are %s", on ? "shown" : "hidden");
+    return RESULT_OK;
+}
+
 static uintptr_t g_state_changed;
 static int g_routes = NP_COMPATSVC_UNTRIED;
 
@@ -523,6 +582,14 @@ void np_compatsvc_register(const struct mach_header_64 *mh, intptr_t slide,
 
     np_webui_register_route(ROUTE_SPECIFY_COMPAT_TOOL, specify_request,
                             specify_response, specify_compat_tool);
+    if (!np_webui_register_route(ROUTE_SET_DEFAULTS, specify_request, specify_response, set_defaults)
+        || !np_webui_register_route(ROUTE_SET_TOOL_DEFAULTS, specify_request, specify_response,
+                                    set_tool_defaults)
+        || !np_webui_register_route(ROUTE_APPLY_TOOL_DEFAULTS, specify_request, specify_response,
+                                    apply_tool_defaults)
+        || !np_webui_register_route(ROUTE_SET_SHOW_ALL, specify_request, specify_response,
+                                    set_show_all))
+        NP_WARN("compatsvc: the Settings page cannot save default compatibility settings");
 
     g_routes = NP_COMPATSVC_READY;
 

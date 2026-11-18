@@ -382,6 +382,8 @@ final class SystemStatus {
 
     func setUpHighball(_ engine: HighballEngine, replacingExisting: Bool = false) async {
         await perform(from: RunnerSetup.Phase.cloning.label) { progress in
+            // Cached sizes outlive a recopy of the same build
+            if case .supported(let build) = engine.support { runnerSizes[build.id] = nil }
             let lock = try DeploymentContent.acquireInstallationLock()
             defer { lock.release() }
             try await requireInstallableContent()

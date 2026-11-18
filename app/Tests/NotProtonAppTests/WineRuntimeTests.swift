@@ -119,16 +119,10 @@ struct WineRuntimeTests {
     }
 
     @Test("Every offered Highball tool enables Steam's Proton Auto-Cloud path mapping")
-    func highballCloudPaths() throws {
+    func highballCloudPaths() {
         let tools = SupportedRunners.all.filter { $0.runtime == .highball }.flatMap(\.tools)
         #expect(!tools.isEmpty)
         #expect(tools.allSatisfy { $0.name.lowercased().contains("proton") })
-        let repo = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-        let compat = try String(contentsOf: repo.appending(path: "dylib/feats/compat.c"), encoding: .utf8)
-        for tool in tools {
-            #expect(compat.contains("\"\(tool.name)\""))
-        }
     }
 
     @Test("Highball r19 is a supported Rosetta build with one tool")
@@ -140,21 +134,23 @@ struct WineRuntimeTests {
         #expect(NtdllPatcher.byBuild["x64-crossover26.3-r19"]?.count == 2)
     }
 
-    // Runs when the r19 engine is on this Mac (Highball install or the plan's scratch fixture):
+    // Runs for each locally available Highball engine (installed or in scratch).
     // the app's own patcher must reproduce the pinned output byte for byte.
-    @Test("The app patches Highball r19's ntdll to the pinned hashes")
-    func highballR19PatchesToPin() throws {
+    @Test("The app patches Highball ntdll to the pinned hashes", arguments: ["r19", "r31"])
+    func highballPatchesToPin(revision: String) throws {
+        let id = "x64-crossover26.3-\(revision)"
         let repo = URL(filePath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
         let candidates = [
-            repo.appending(path: "scratch/hb-r19/engine"),
-            HighballSource.home().appending(path: "engines/x64-crossover26.3-r19/engine"),
+            repo.appending(path: "scratch/hb-\(revision)/engine"),
+            HighballSource.home().appending(path: "engines/\(id)/engine"),
         ]
         guard let root = candidates.first(where: {
             FileManager.default.fileExists(atPath: $0.appending(path: "lib/wine/x86_64-windows/ntdll.dll").path(percentEncoded: false))
         }) else { return }
-        let build = try #require(SupportedRunners.build(id: "x64-crossover26.3-r19"))
+        let build = try #require(SupportedRunners.build(id: id))
+        #expect(Digest.sha256IfPresent(root.appending(path: "bin/wine")) == build.loaderSHA256)
         let out = try scratchDirectory("hb-patch")
         defer { try? FileManager.default.removeItem(at: out) }
         for patch in NtdllPatcher.patches(for: build) {

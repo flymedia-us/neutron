@@ -14,6 +14,8 @@ Requires an Apple silicon Mac, macOS 15 or later, Steam for macOS, and Rosetta 2
 
 Official releases are signed and notarized. Neutron checks for updates automatically; use **Check for Updates…** to install a verified update. D3DMetal is optional and requires accepting Apple's license during setup. Compatibility varies by game.
 
+Current source builds offer Highball Wine 11 r31 for new setups and support existing r19 installs and per-game tool selections.
+
 ## Libraries and game settings
 
 Add an existing exFAT library in **Steam → Settings → Storage** and reconnect the drive before playing. Use Steam Cloud for saves between computers, allowing each computer to finish syncing before switching. Sharing a library does not provide universal offline save sharing.

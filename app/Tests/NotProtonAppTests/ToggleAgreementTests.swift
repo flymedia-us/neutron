@@ -19,8 +19,8 @@ struct ToggleAgreementTests {
     static func toggleNames(in webpatch: String) throws -> Set<String> {
         var names: Set<String> = []
         for pattern in [
-            #"g\(\\"([A-Z0-9_]+)\\"\)"#,
-            #"T\(\[\\"([A-Z0-9_]+)\\""#,
+            #"[gG]\(\\"([A-Z0-9_]+)\\"\)"#,
+            #"[TD]\(\[?\\"([A-Z0-9_]+)\\""#,
             #"\[\\"([A-Z0-9_]+)\\","#,
         ] {
             for match in webpatch.matches(of: try Regex(pattern)) {
@@ -40,7 +40,7 @@ struct ToggleAgreementTests {
         #expect(names.count >= 8, "found \(names.count) toggles, the parse looks wrong")
 
         #expect(
-            webpatch.contains(#"r=add+\" %command%\""#),
+            webpatch.contains(#"r=lead+add+\" %command%\""#),
             "webpatch.c no longer writes %command%, so the toggles would reach the game as arguments"
         )
 

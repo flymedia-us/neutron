@@ -129,13 +129,23 @@ jobs:
           make -s peicon-fixtures
           make -s panel-behavior
           make -s spawn-env
+          make -s spawn-live
           make -s activatecheck
           make -s compatcheck
           make -s compatsvc-check
           make -s prefixstate-check
+          make -s defaults-check
+          make -s compatpage-check
+          make -s defaults-drift
           make -s shortcutcheck
           make -s launch-shell
           make -s envcheck
+          make -s envpasscheck
+          make -s featcheck
+          make -s featstagecheck
+          make -s conf-fixtures
+          make -s confcheck
+          make -s runnervariantcheck
           make -s buildcheck
           make -s settingscheck
           make -s routecheck
@@ -143,6 +153,8 @@ jobs:
           make -s gamedrivecheck
           make -s launchercheck
           make -s seedcheck
+          make -s bundlecheck
+          make -s ceg-check
 
       - name: Check overlay ownership and delivery
         run: make -s overlay-shim-tests

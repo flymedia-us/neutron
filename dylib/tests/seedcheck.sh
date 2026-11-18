@@ -19,7 +19,8 @@ functions="$functions
 $(cut_block '^without_lock_fds\(\) \{' '^\}' 1)"
 np_build=fixture
 np_runtime=crossover
-export np_build np_runtime CX_ROOT CX_HOME wine_unix np_tool_dir WINELOADER WINESERVER
+np_variant_key=""
+export np_variant_key np_build np_runtime CX_ROOT CX_HOME wine_unix np_tool_dir WINELOADER WINESERVER
 export STEAM_COMPAT_DATA_PATH WINEPREFIX template_dir log seed_scratch seed_building
 CX_ROOT="$work/runner"
 CX_HOME="$work/home"
@@ -354,16 +355,40 @@ exec 8>&-
 check test "$(probe_lock)" = unlocked
 kill "$(cat "$case_root/held.pid")" 2>/dev/null || true
 
+recover() {
+  recovery_status=0
+  env functions="$functions" /bin/sh -ec "
+    eval \"\$functions\"
+    show_alert() { :; }
+    prepare_prefix_directory
+    : > \"\$STEAM_COMPAT_DATA_PATH/continued\"
+  " || recovery_status=$?
+}
+
 fixture
 mkdir -p "$STEAM_COMPAT_DATA_PATH/pfx.replaced.123"
 printf save > "$STEAM_COMPAT_DATA_PATH/pfx.replaced.123/save"
-recovery_status=0
-env functions="$functions" /bin/sh -ec "
-  eval \"\$functions\"
-  show_alert() { :; }
-  prepare_prefix_directory
-  : > \"\$STEAM_COMPAT_DATA_PATH/continued\"
-" || recovery_status=$?
+recover
+check test "$recovery_status" -eq 0
+check test -f "$STEAM_COMPAT_DATA_PATH/continued"
+check test -f "$WINEPREFIX/save"
+check test ! -e "$STEAM_COMPAT_DATA_PATH/pfx.replaced.123"
+
+fixture
+mkdir -p "$STEAM_COMPAT_DATA_PATH/pfx.replaced.123"
+printf save > "$STEAM_COMPAT_DATA_PATH/pfx.replaced.123/save"
+printf reg > "$WINEPREFIX/user.reg"
+recover
+check test "$recovery_status" -eq 0
+check test -f "$WINEPREFIX/user.reg"
+check test -f "$(echo "$STEAM_COMPAT_DATA_PATH"/pfx.previous-*/save)"
+check test ! -e "$STEAM_COMPAT_DATA_PATH/pfx.replaced.123"
+
+fixture
+mkdir -p "$STEAM_COMPAT_DATA_PATH/pfx.replaced.123"
+printf save > "$STEAM_COMPAT_DATA_PATH/pfx.replaced.123/save"
+printf half > "$WINEPREFIX/half"
+recover
 check test "$recovery_status" -eq 1
 check test ! -e "$STEAM_COMPAT_DATA_PATH/continued"
 check test -f "$STEAM_COMPAT_DATA_PATH/pfx.replaced.123/save"

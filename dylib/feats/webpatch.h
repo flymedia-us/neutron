@@ -16,6 +16,32 @@ void np_webpatch_set_fallback_tool(const char *name);
 // Sets the tools this thread's Wine options panel treats as FEX. Names the
 // fallback would drop are skipped, as is anything past NP_WEBPATCH_FEX_TOOLS_MAX.
 void np_webpatch_set_fex_tools(const char *const *names, size_t count);
+// Compat tool names, the CrossOver build each one runs and the architecture it runs it
+// at, used to work out which runner variants can be offered for a game.
+void np_webpatch_set_tool_builds(const char *const *names, const char *const *builds,
+                                 const char *const *archs, size_t count);
+
+// NULL for a runner whose file couldn't be read, which hides the page.
+void np_webpatch_set_defaults(const char *rosetta, const char *fex);
+
+#define NP_WEBPATCH_BUILDS_MAX 32
+
+typedef struct {
+    const char *tool;     // Steam's name for the tool
+    const char *build;
+    const char *label;
+    int         fex;
+    const char *override; // KEY=VALUE lines, NULL when the build has no own set
+} np_webpatch_build_t;
+
+void np_webpatch_set_builds(const np_webpatch_build_t *builds, size_t count);
+
+#define NP_SHOW_ALL_PLUGINS_FILE "show-all-plugins"
+
+// For tests, so they don't depend on the plugins or variants installed on the machine.
+void np_webpatch_set_features(const char *ready, const char *rows);
+void np_webpatch_set_show_all(int on);
+void np_webpatch_set_variants(const char *rows);
 
 // Sets the tools whose engine cannot run D3DMetal or DXVK; this thread's panel drops
 // those entries for them. Same name rules and limit as the FEX list.
@@ -27,6 +53,8 @@ void np_webpatch_set_renderer_gaps(const char *const *no_d3dmetal, size_t d3dmet
 // out; selecttool reads its list from the CompatManager routes.
 #define NP_SHAPE_FORCETOOL  "forcetool"
 #define NP_SHAPE_SELECTTOOL "selecttool"
+
+int np_webpatch_has_shape(const uint8_t *src, size_t src_len);
 
 // `out_shape` is optional and names the compat UI the chunk carried, so a caller can tell
 // which page it just served without probing the bytes a second time. It is set whenever a

@@ -71,6 +71,9 @@ public enum LaunchEnvironment {
                 }
             }
             notes.append("renderer \(resolved.renderer.rawValue)")
+            var launchSettings = settings
+            launchSettings.renderer = resolved.renderer
+            notes += PlayReport.settingsSummary(launchSettings).split(separator: "\n").map { "settings \($0)" }
             // The same steps WineRunner takes before every launch
             do { try bottle.prepareDLSSBridge(engine: engine, renderer: resolved.renderer) } catch {
                 notes.append("DLSS left off: \(error)")

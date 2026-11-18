@@ -1,32 +1,33 @@
 {
-  "pins": [
+  "originHash" : "45327f81379860375721a1835d9f3e17a319c45c8280196628200521b010b579",
+  "pins" : [
     {
-      "identity": "highball",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/gauthierpiarrette/highball",
-      "state": {
-        "revision": "daa2095b9fd4abad0b9db7c57cacbd4d49a9e06e",
-        "version": "0.10.22"
+      "identity" : "highball",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/gauthierpiarrette/highball",
+      "state" : {
+        "revision" : "dbc36ebc67f75944fce0dd7994b060dcd68a67d1",
+        "version" : "0.10.26"
       }
     },
     {
-      "identity": "sparkle",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/sparkle-project/Sparkle",
-      "state": {
-        "revision": "eef1a539a373c1f1a320624b1130fc5de7b2e100",
-        "version": "2.10.0"
+      "identity" : "sparkle",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sparkle-project/Sparkle",
+      "state" : {
+        "revision" : "eef1a539a373c1f1a320624b1130fc5de7b2e100",
+        "version" : "2.10.0"
       }
     },
     {
-      "identity": "swift-argument-parser",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/apple/swift-argument-parser.git",
-      "state": {
-        "revision": "6a52f3251125d74daf04fcbd5e6f08a75d074382",
-        "version": "1.8.2"
+      "identity" : "swift-argument-parser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-argument-parser.git",
+      "state" : {
+        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "version" : "1.8.2"
       }
     }
   ],
-  "version": 3
+  "version" : 3
 }

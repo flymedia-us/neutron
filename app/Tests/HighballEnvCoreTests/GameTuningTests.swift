@@ -78,6 +78,17 @@ struct GameTuningTests {
         #expect(settings.dxvkAppConfig["game.exe"]?["dxgi.maxFrameRate"] == "60")
     }
 
+    @Test("A recipe frame cap yields to an explicit cap, including 0")
+    func recipeFrameCap() throws {
+        let recipe: [String: Any] = ["id": "game", "kind": "game", "title": "Game", "steps": [
+            ["type": "framecap", "value": 60],
+        ]]
+        let snapshot = try data(games: [row("game", appID: 42)], recipes: [recipe])
+        #expect(try tune(snapshot, appID: 42).0.fpsCap == 60)
+        #expect(try tune(snapshot, appID: 42, user: ["NOTPROTON_FPS_LIMIT": "0"]).0.fpsCap == 0)
+        #expect(try tune(snapshot, appID: 42, user: ["NOTPROTON_FPS_LIMIT": "120"]).0.fpsCap == 120)
+    }
+
     @Test("A variable the user or run script already set is not replaced by a recipe")
     func recipeEnvironmentYields() throws {
         let recipe: [String: Any] = ["id": "game", "kind": "game", "title": "Game", "steps": [

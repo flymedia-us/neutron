@@ -180,6 +180,7 @@ enum SteamInstaller {
                 try signSteamBundle(app)
             } catch {
                 revertPlist(priorPlist, at: plist, app: app)
+                if priorRequirement == nil || requirement(app) != priorRequirement { resetInputAccess() }
                 throw error
             }
             if priorRequirement == nil || requirement(app) != priorRequirement {
@@ -189,6 +190,7 @@ enum SteamInstaller {
 
         report(.registering)
         register(app)
+        GameTiles.refresh(launchers: support.appending(path: "launchers"), run: payload.run)
 
         let landed = SteamBundle.currentInsert(at: plist)
         guard landed == dylib.path(percentEncoded: false) else {
@@ -211,6 +213,7 @@ enum SteamInstaller {
                 AppLog.note("install: could not record the rebuild app: \(error.localizedDescription)")
             }
         }
+        AppLog.note("install: \(dylib.path(percentEncoded: false)) uuid \(MachOBuild.identity(of: dylib)?.joined(separator: ",") ?? "unreadable")")
         report(.finished)
         return InstallOutcome(
             stoppedClient: stopped,
@@ -271,7 +274,9 @@ enum SteamInstaller {
         guard let insert = SteamBundle.currentInsert(at: plist), !insert.isEmpty else { return }
 
         let deployed = dylib.path(percentEncoded: false)
-        let foreign = insert.split(separator: ":").map(String.init).filter { $0 != deployed }
+        let foreign = insert.split(separator: ":").map(String.init).filter {
+            $0 != deployed && URL(filePath: $0).lastPathComponent != SupportPaths.dylibName
+        }
         guard foreign.isEmpty else {
             throw StepFailure(
                 step: step,
@@ -284,7 +289,8 @@ enum SteamInstaller {
         let deployed = SteamBundle.currentInsert(at: plist) == dylib.path(percentEncoded: false)
             && SteamBundle.currentControllerBlock(at: plist) == SteamBundle.controllerBlockValue
         let file = DeploymentContent.File(source: shipping, destination: dylib, name: SupportPaths.dylibName, allowsResigning: true)
-        if deployed, try file.matches() {
+        let sealed = deployed && (try? Shell.run("/usr/bin/codesign", ["--verify", app.path(percentEncoded: false)]))?.succeeded == true
+        if deployed, sealed, try file.matches() {
             AppLog.note("install: Steam already carries this dylib, installing for this account only")
             return false
         }

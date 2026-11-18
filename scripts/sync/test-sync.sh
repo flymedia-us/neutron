@@ -18,7 +18,11 @@ cat > "$work/bin/gh" <<'STUB'
 #!/bin/sh
 printf '%s\n' "$*" >> "$STUB_LOG"
 case "$1 $2" in
-  "issue list") cat "$STUB_DIR/issues" 2>/dev/null ;;
+  "issue list")
+    case "$*" in
+      *'--json number,title'*) if [ -f "$STUB_DIR/previous-issue" ]; then cat "$STUB_DIR/previous-issue"; fi ;;
+      *) if [ -f "$STUB_DIR/issues" ]; then cat "$STUB_DIR/issues"; fi ;;
+    esac ;;
   "pr list") cat "$STUB_DIR/prs" 2>/dev/null ;;
   "release list") cat "$STUB_DIR/releases" 2>/dev/null ;;
   "api repos/gauthierpiarrette/highball/git/ref/tags/"*)
@@ -28,7 +32,7 @@ case "$1 $2" in
   "pr create")
     if [ -f "$STUB_DIR/block-pr" ]; then echo 'Organization policy blocks PR creation' >&2; exit 1; fi
     echo "https://example.invalid/1" ;;
-  "issue create")
+  "issue create"|"issue edit")
     while [ "$#" -gt 0 ]; do
       if [ "$1" = --body-file ]; then cat "$2" >> "$STUB_LOG"; break; fi
       shift
@@ -45,9 +49,10 @@ git_quiet() { git -c user.name=t -c user.email=t@example.invalid -c init.default
 checkout() {
   rm -rf "$work/repo" "$work/origin.git" "$work/upstream.git" "$work/seed"
   git_quiet init -q "$work/seed"
-  mkdir -p "$work/seed/scripts/sync"
+  mkdir -p "$work/seed/scripts/sync" "$work/seed/dylib"
   cp "$here"/common.sh "$here"/notproton.sh "$here"/highball.sh "$here"/highball-engine.sh "$here"/known-highball-engine "$work/seed/scripts/sync/"
   printf 'line one\nline two\n' > "$work/seed/steam.cpp"
+  printf '#define NOTPROTON_VERSION "1.2.0"\n' > "$work/seed/dylib/version.h"
   git_quiet -C "$work/seed" add -A && git_quiet -C "$work/seed" commit -q -m "base"
   git_quiet clone -q --bare "$work/seed" "$work/origin.git"
   git_quiet clone -q --bare "$work/seed" "$work/upstream.git"
@@ -92,6 +97,18 @@ run notproton.sh
 hasnt "a second run opens no second PR" "pr create" "$STUB_LOG"
 has "and says why" "already in a PR or issue" "$work/out"
 
+echo "== NotProton: an upstream version bump keeps the fork release version =="
+checkout
+origin_commit dylib/version.h '#define NOTPROTON_VERSION "0.1.0-alpha.6"' "Fork version"
+origin_commit UPSTREAMS.json '{"primary":{"version":"1.2.0"}}' "Record upstream version"
+sha=$(upstream_commit dylib/version.h '#define NOTPROTON_VERSION "1.2.6"' "Upstream version")
+run notproton.sh
+has "the version conflict still produces a PR" "pr create .* --head sync/notproton-$sha" "$STUB_LOG"
+is "the branch retains the fork version" '#define NOTPROTON_VERSION "0.1.0-alpha.6"' \
+  "$(git -C "$work/origin.git" show "sync/notproton-$sha:dylib/version.h")"
+is "the branch records the upstream version" "1.2.6" \
+  "$(git -C "$work/origin.git" show "sync/notproton-$sha:UPSTREAMS.json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["primary"]["version"])')"
+
 echo "== NotProton: PR policy leaves a review branch and issue =="
 checkout
 sha=$(upstream_commit fix.c 'int fixed;' "Fix runtime")
@@ -112,7 +129,8 @@ checkout
 origin_commit steam.cpp 'line one\nours\n' "our change"
 sha=$(upstream_commit steam.cpp 'line one\ntheirs\n' "their change")
 run notproton.sh
-has "an issue is created" "issue create .* --title NotProton $sha does not merge cleanly" "$STUB_LOG"
+has "an issue is created" "issue create .* --title Upstream sync: NotProton merge conflict" "$STUB_LOG"
+has "the notice includes the upstream revision" "NotProton $sha needs a manual merge" "$STUB_LOG"
 hasnt "no PR is created" "pr create" "$STUB_LOG"
 is "no branch is pushed" "0" "$(git -C "$work/origin.git" branch --list "sync/notproton-*" | wc -l | tr -d ' ')"
 is "the checkout is left clean" "" "$(git -C "$work/repo" status --porcelain)"
@@ -120,6 +138,13 @@ printf '7\n' > "$STUB_DIR/issues"
 run notproton.sh
 hasnt "with the issue open, no second issue" "issue create" "$STUB_LOG"
 rm -f "$STUB_DIR/issues"
+printf '7\n' > "$STUB_DIR/previous-issue"
+sha=$(upstream_commit fix.c 'int newer;' "Another upstream update")
+run notproton.sh
+has "a newer conflicting revision updates the existing notice" "issue edit 7" "$STUB_LOG"
+has "the existing notice now describes the newer revision" "NotProton $sha needs a manual merge" "$STUB_LOG"
+hasnt "a newer conflict does not create another notice" "issue create" "$STUB_LOG"
+rm -f "$STUB_DIR/previous-issue"
 
 echo "== Highball: pin and database =="
 hb() {   # pinned-kit db-commit

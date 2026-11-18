@@ -16,6 +16,20 @@ issue_exists() {
   [ -n "$("$GH" issue list -R "$REPO" --label upstream-sync --state open --search "$1" --json number -q '.[0].number' 2>/dev/null)" ]
 }
 
+# Keep one actionable notice per source and reason while upstream keeps advancing.
+sync_issue() (
+  source=$1
+  title=$2
+  body_file=$3
+  number=$("$GH" issue list -R "$REPO" --label upstream-sync --label "$source" --state open \
+    --search "\"$title\" in:title" --json number,title -q "map(select(.title == \"$title\")) | .[0].number") || return
+  if [ -n "$number" ]; then
+    "$GH" issue edit "$number" -R "$REPO" --body-file "$body_file"
+  else
+    "$GH" issue create -R "$REPO" --title "$title" --label upstream-sync --label "$source" --body-file "$body_file"
+  fi
+)
+
 # 0 when an open PR comes from the branch
 pr_exists() {
   [ -n "$("$GH" pr list -R "$REPO" --head "$1" --state open --json number -q '.[0].number' 2>/dev/null)" ]
@@ -47,8 +61,7 @@ open_review() (
   else
     printf 'The update branch is ready, but GitHub refused automatic PR creation. Repository or organization policy may block it. No permission changes were made.\n\nReview and open a PR: https://github.com/%s/compare/main...%s?expand=1\n\n%s\n' \
       "$REPO" "$branch" "$body" > "$review_tmp/issue.md"
-    "$GH" issue create -R "$REPO" --title "$title: manual PR needed" \
-      --label upstream-sync --label "$label" --body-file "$review_tmp/issue.md"
-    sync_log "PR creation unavailable; opened a review issue for $branch"
+    sync_issue "$label" "Upstream sync: $label manual PR needed" "$review_tmp/issue.md"
+    sync_log "PR creation unavailable; recorded a review issue for $branch"
   fi
 )
