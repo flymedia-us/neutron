@@ -15,7 +15,13 @@ const expand = (s, caps) => s.replace(/[\u0001-\u0008\u0013-\u0016]/g, c => {
 
 const mk = (type, props) => ({ type, props });
 const react = { jsx: mk, jsxs: mk, Fragment: 'Fragment' };
-const barrel = { XY: 'Section', m: 'Dropdown', Yh: 'Toggle' };
+const STUB_TYPES = { XY: 'Section', m: 'Dropdown', Yh: 'Toggle', $n: 'Button', Vb: 'FieldDropdown', D0: 'Field',
+                     y4: 'ToggleField', J1: 'FieldProvider', d3: 'Slider', gz: 'SnapSlider' };
+const barrelFor = emit => Object.fromEntries(
+  execFileSync(emit, ['barrel-names'], { encoding: 'utf8' }).trim().split('\n').map(n => {
+    if (!(n in STUB_TYPES)) throw new Error('the page takes ' + n + ' from Steam and the harness has no stub');
+    return [n, STUB_TYPES[n]];
+  }));
 
 // The two shapes take the payload in different forms and bind different names, which
 // is the whole of the difference between them.
@@ -26,21 +32,49 @@ const FORMS = {
 
 // `fallback`, `fexTools`, `noD3DMetal` and `noDXVK` stand in for what the hook sets before the transform.
 function panel(emit, form, globals = { document: { documentElement: { lang: 'en' } } },
-               { fallback = 'neutron', fexTools = [], noD3DMetal = [], noDXVK = [], names = ['R0', 'B0'] } = {}) {
+               { fallback = 'neutron', fexTools = [], noD3DMetal = [], noDXVK = [], names = ['R0', 'B0'], data = false, drop = [],
+                 ready, feats, vars, showAll,
+                 // What an install would carry. The panel renders for these and no others.
+                 tools = ['neutron', 'notproton', 'notproton-26.3', 'notproton-fex', 'notproton-fex-rosetta',
+                          'notproton-rosetta', 'neutron-rosetta'],
+               } = {}) {
+  // Feature rows are handed over rather than read from disk, so a check reads the same
+  // on any machine and says nothing about which features an install carries.
   const env = { ...process.env, NP_PANEL_NO_D3DMETAL: noD3DMetal.join(','), NP_PANEL_NO_DXVK: noDXVK.join(',') };
-  const raw = execFileSync(emit, [form, fallback, ...fexTools], { encoding: 'utf8', env }).trim();
+  if (ready !== undefined) env.NP_TEST_READY = ready;
+  if (feats !== undefined) env.NP_TEST_FEATS = feats;
+  if (vars !== undefined) env.NP_TEST_VARS = vars;
+  if (showAll) env.NP_TEST_SHOW_ALL = '1';
+  // A build the page was given is a tool the install carries, as it is in a real one,
+  // where the settings page lists a subset of what the compatibility folder holds.
+  env.NP_TEST_TOOLS = [...new Set([...tools, ...(globals.MSCXBuilds || []).map(b => b && b.id),
+                                   ...fexTools])].filter(Boolean).join(',');
+  const raw = execFileSync(emit, [form + (data ? '-data' : ''), fallback, ...fexTools],
+                           { encoding: 'utf8', env }).trim();
+  const barrel = barrelFor(emit);
+  for (const n of drop) delete barrel[n];
   const f = FORMS[form];
   const body = expand(raw, { [f.react]: names[0], [f.barrel]: names[1] });
   const src = form === 'component' ? 'var ' + body.replace(/,$/, '') : body.replace(/;$/, '');
   const written = [];
+  // A file dialog answers synchronously with the next entry in `files`, and rejects like Steam's when there is none.
+  const dialogs = [], files = [];
   const SteamClient = {
     Apps: { SetAppLaunchOptions: (appid, opts) => written.push({ appid, opts }) },
+    System: { OpenFileDialog: q => {
+      dialogs.push(q);
+      const p = files.shift();
+      return { then: (f, r) => p === undefined ? r && r({ result: 2 }) : f(p) };
+    } },
   };
   const build = new Function(names[0], names[1], 'SteamClient', 'globalThis',
     src + '\nreturn { MSCXOpts, MSCXPick: typeof MSCXPick === "function" ? MSCXPick : null,' +
-    ' MSCXToolQuery: typeof MSCXToolQuery === "function" ? MSCXToolQuery : null };');
-  const { MSCXOpts, MSCXPick, MSCXToolQuery } = build(react, barrel, SteamClient, globals);
-  return { render: MSCXOpts, pick: MSCXPick, toolQuery: MSCXToolQuery, written };
+    ' MSCXToolQuery: typeof MSCXToolQuery === "function" ? MSCXToolQuery : null,' +
+    ' MSCXDefaultsPage: typeof MSCXDefaultsPage === "function" ? MSCXDefaultsPage : null };');
+  const { MSCXOpts, MSCXPick, MSCXToolQuery, MSCXDefaultsPage } =
+    build(react, barrel, SteamClient, globals);
+  return { render: MSCXOpts, pick: MSCXPick, toolQuery: MSCXToolQuery,
+           defaultsPage: MSCXDefaultsPage, written, globals, dialogs, files };
 }
 
 // Function components are resolved rather than recorded, so a check sees the nodes the

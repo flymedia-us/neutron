@@ -11,6 +11,9 @@ struct NotProtonApp: App {
 
     init() {
         AppLog.start()
+        if let executable = Bundle.main.executableURL {
+            RebuildPrefixCommand.refreshExecutableRecord(executable, in: SupportPaths.support)
+        }
     }
 
     var body: some Scene {
@@ -19,7 +22,8 @@ struct NotProtonApp: App {
                 .environment(status)
                 .environment(prefixes)
                 .frame(minWidth: 720, minHeight: 460)
-                .onChange(of: pane) { prefixes.forgetOutcome() }
+                // Status never shows the prefix banner, so a result that lands there is kept
+                .onChange(of: pane) { old, _ in if old != .status { prefixes.forgetOutcome() } }
                 .onChange(of: status.snapshot?.installedRunners.map(\.id)) {
                     if prefixes.hasLoaded { Task { await prefixes.load() } }
                 }
@@ -70,17 +74,20 @@ struct NotProtonApp: App {
                 .keyboardShortcut("i", modifiers: .command)
                 .disabled(!status.canInstall)
 
-            Button("Set Up Compatibility Tool") { Task { await status.requestHighballCompatibilityTool() } }
+            Button("Set Up Compatibility Tool") {
+                pane = .status
+                Task { await status.requestHighballCompatibilityTool() }
+            }
                 .disabled(!status.canInstall || status.snapshot?.highball.contains(where: \.isUsable) != true)
 
-            Button("Fetch Valve Binaries") { Task { await status.fetchValveBinaries() } }
+            Button("Fetch Valve Binaries") { pane = .status; Task { await status.fetchValveBinaries() } }
                 .disabled(!status.canInstall)
 
             Divider()
 
             updateBlockCommand
 
-            Button("Repair Steam") { status.pendingConfirmation = .replaceSteam }
+            Button("Repair Steam") { pane = .status; status.pendingConfirmation = .replaceSteam }
                 .disabled(!status.isIdle)
 
             Divider()
@@ -122,6 +129,7 @@ struct NotProtonApp: App {
 
             Button(PrefixPrompt.backUpButton(selectionTargets)) {
                 if !selectionTargets.isEmpty {
+                    pane = .prefixes
                     prefixes.pendingConfirmation = .backUp(selectionTargets)
                 }
             }
@@ -131,6 +139,7 @@ struct NotProtonApp: App {
                 Menu(PrefixPrompt.rebuildButton(selectionTargets)) {
                     ForEach(prefixes.tools) { tool in
                         Button(tool.display) {
+                            pane = .prefixes
                             prefixes.pendingConfirmation = .rebuild(selectionTargets, tool)
                         }
                     }
@@ -139,6 +148,7 @@ struct NotProtonApp: App {
             } else {
                 Button(PrefixPrompt.rebuildButton(selectionTargets)) {
                     if let tool = prefixes.tools.first, !selectionTargets.isEmpty {
+                        pane = .prefixes
                         prefixes.pendingConfirmation = .rebuild(selectionTargets, tool)
                     }
                 }
@@ -147,6 +157,7 @@ struct NotProtonApp: App {
 
             Button(PrefixPrompt.deleteButton(selectionTargets)) {
                 if !selectionTargets.isEmpty {
+                    pane = .prefixes
                     prefixes.pendingConfirmation = .delete(selectionTargets)
                 }
             }
@@ -165,10 +176,10 @@ struct NotProtonApp: App {
     @ViewBuilder
     private var updateBlockCommand: some View {
         if status.snapshot?.updateBlocked == true {
-            Button("Allow Client Updates") { Task { await status.setUpdateBlock(false) } }
+            Button("Allow Client Updates") { pane = .status; Task { await status.setUpdateBlock(false) } }
                 .disabled(!status.isIdle)
         } else {
-            Button("Block Client Updates") { status.pendingConfirmation = .blockUpdates }
+            Button("Block Client Updates") { pane = .status; status.pendingConfirmation = .blockUpdates }
                 .disabled(!status.isIdle || status.snapshot == nil)
         }
     }

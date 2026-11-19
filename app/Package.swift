@@ -22,7 +22,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
         // Highball's own launch-environment code (GPL-3.0). upstream-sync bumps this pin.
-        .package(url: "https://github.com/gauthierpiarrette/highball", exact: "0.10.22"),
+        .package(url: "https://github.com/gauthierpiarrette/highball", exact: "0.10.26"),
     ],
     targets: [
         .executableTarget(
@@ -42,6 +42,8 @@ let package = Package(
                 .copy("Resources/detour32-cx26.bin"),
                 .copy("Resources/detour2-hb-r19.bin"),
                 .copy("Resources/detour32-hb-r19.bin"),
+                .copy("Resources/detour2-hb-r31.bin"),
+                .copy("Resources/detour32-hb-r31.bin"),
                 .copy("Resources/detour2-41069.bin"),
                 .copy("Resources/detour32-41069.bin"),
                 .copy("Resources/detour2-fex-41069.bin"),
@@ -52,6 +54,10 @@ let package = Package(
                 .copy("Resources/detour2-fex-41073.bin"),
                 .copy("Resources/detour32-fex-41073.bin"),
                 .copy("Resources/detour64-fex-41073.bin"),
+                .copy("Resources/detour32-41303.bin"),
+                .copy("Resources/detour2-fex-41303.bin"),
+                .copy("Resources/detour32-fex-41303.bin"),
+                .copy("Resources/detour64-fex-41303.bin"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

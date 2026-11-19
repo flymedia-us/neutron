@@ -6,6 +6,7 @@
 #include "../resolver/sigdb.h"
 #include "../core/macho.h"
 #include "../hooks/hooks.h"
+#include "../feats/ceg.h"
 #include "../feats/compat.h"
 #include "../feats/input_access.h"
 
@@ -19,9 +20,11 @@
 #include <mach-o/dyld.h>
 #include <crt_externs.h>
 #include <libgen.h>
+#include <dlfcn.h>
 
 #define STEAMCLIENT_DYLIB "steamclient.dylib"
 #define STEAMUI_DYLIB     "steamui.dylib"
+#define STEAMSERVICE_DYLIB "steamservice.dylib"
 
 // The bootstrapper can take a while before the real client dylib appears...
 #define WAIT_TIMEOUT_MS 60000
@@ -107,36 +110,40 @@ static pthread_t g_install;
 static int       g_install_started;
 static int       g_active;
 
-static void install_steamui(np_sigdb_t *sigdb) {
-    int required = np_required_for_module(sigdb, STEAMUI_DYLIB);
-    if (required == 0) {
-        NP_DBG("install_thread: no %s signatures in this database", STEAMUI_DYLIB);
+typedef int (*np_module_installer_t)(const struct mach_header_64 *mh, intptr_t slide,
+                                     const char *image_path, np_resolve_result_t *resolved,
+                                     int *total_out);
+
+static void install_module(np_sigdb_t *sigdb, const char *module,
+                           np_module_installer_t installer) {
+    if (!np_module_has_signatures(sigdb, module)) {
+        NP_DBG("install_thread: no %s signatures in this database", module);
         return;
     }
 
     const struct mach_header_64 *mh = NULL;
     intptr_t slide = 0;
+    char path[1024] = "";
 
-    if (np_await_image(STEAMUI_DYLIB, WAIT_TIMEOUT_MS, &mh, &slide, NULL, 0) != 0) {
+    if (np_await_image(module, WAIT_TIMEOUT_MS, &mh, &slide, path, sizeof(path)) != 0) {
         NP_WARN("install_thread: %s absent after %d ms, its hooks stay off",
-                STEAMUI_DYLIB, WAIT_TIMEOUT_MS);
+                module, WAIT_TIMEOUT_MS);
         return;
     }
 
     np_resolve_result_t resolved = {0};
-    int count = np_resolve_signatures(mh, slide, sigdb, STEAMUI_DYLIB, &resolved);
-    NP_LOG("install_thread: %s signatures %d/%d resolved", STEAMUI_DYLIB, count, required);
+    int required = np_required_for_module(sigdb, module);
+    int count = np_resolve_signatures(mh, slide, sigdb, module, &resolved);
+    NP_LOG("install_thread: %s signatures %d/%d resolved", module, count, required);
 
     if (count < required)
         NP_WARN("install_thread: %s %d/%d signatures resolved; the hooks that did "
-                "resolve still install, the rest stay off", STEAMUI_DYLIB, count,
-                required);
+                "resolve still install, the rest stay off", module, count, required);
 
     int total = 0;
-    int installed = np_hooks_install_steamui(mh, slide, &resolved, &total);
+    int installed = installer(mh, slide, path, &resolved, &total);
 
-    NP_LOG("install_thread: %s ready, %d/%d hooks installed",
-           STEAMUI_DYLIB, installed, total);
+    NP_LOG("install_thread: %s ready, %d/%d hooks installed", module, installed, total);
 
     np_free_resolution(&resolved);
 }
@@ -213,7 +220,8 @@ static void *install_thread(void *unused) {
 
     np_free_resolution(&resolved);
 
-    install_steamui(&sigdb);
+    install_module(&sigdb, STEAMUI_DYLIB, np_hooks_install_steamui);
+    install_module(&sigdb, STEAMSERVICE_DYLIB, np_hooks_install_steamservice);
 
     np_free_profile(&sigdb);
 
@@ -244,6 +252,25 @@ static void np_log_platform_overrides(void) {
 }
 
 // Steam Helper runs /usr/bin/profiles at startup. If a user has SIP disabled, profiles would inherit the insert and crash, yikes.
+static const char *image_uuid(const void *base, char *out, size_t size) {
+    const struct mach_header_64 *mh = base;
+    snprintf(out, size, "unknown");
+    if (!mh || mh->magic != MH_MAGIC_64) return out;
+    const uint8_t *cursor = (const uint8_t *)(mh + 1);
+    for (uint32_t i = 0; i < mh->ncmds; i++) {
+        const struct load_command *lc = (const struct load_command *)cursor;
+        if (lc->cmd == LC_UUID) {
+            const uint8_t *u = ((const struct uuid_command *)lc)->uuid;
+            snprintf(out, size, "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+                     u[0], u[1], u[2], u[3], u[4], u[5], u[6], u[7],
+                     u[8], u[9], u[10], u[11], u[12], u[13], u[14], u[15]);
+            return out;
+        }
+        cursor += lc->cmdsize;
+    }
+    return out;
+}
+
 static int is_main_helper(const char *pn) {
     if (strcmp(pn, "Steam Helper") != 0)
         return 0;
@@ -276,6 +303,11 @@ static void np_init(void) {
 
     NP_LOG("np_init: loaded into %s (pid %d) version %s",
            pn, getpid(), NOTPROTON_VERSION);
+    Dl_info self;
+    char uuid[40];
+    if (dladdr((const void *)&np_init, &self) && self.dli_fname)
+        NP_LOG("np_init: image %s uuid %s", self.dli_fname,
+               image_uuid(self.dli_fbase, uuid, sizeof uuid));
 
     np_log_platform_overrides();
     np_compat_export_tools_path();
@@ -284,6 +316,7 @@ static void np_init(void) {
     np_compat_ensure_tool_manifest();
     np_hooks_spawn_install();
     np_hooks_activate_install();
+    np_ceg_snapshot_env();
 
     if (pthread_create(&g_install, NULL, install_thread, NULL) == 0)
         g_install_started = 1;
@@ -295,6 +328,8 @@ __attribute__((destructor))
 static void np_fini(void) {
     if (!g_active)
         return;
+
+    np_ceg_stop();
 
     if (g_install_started) {
         np_await_stop();

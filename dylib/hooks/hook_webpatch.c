@@ -3,8 +3,8 @@
 // not modified, to keep the Steam bootstrap happy.
 
 #include "../feats/webpatch.h"
-#include "../feats/compat.h"
 #include "../feats/compatsvc.h"
+#include "../feats/compatpage.h"
 #include "../util/file.h"
 #include "../util/log.h"
 
@@ -120,14 +120,7 @@ static int open_patched(const char *path) {
     }
     close(in);
 
-    np_webpatch_set_fallback_tool(np_compat_fallback_tool_name());
-    const char *fex[NP_WEBPATCH_FEX_TOOLS_MAX];
-    np_webpatch_set_fex_tools(fex, np_compat_fex_tools(fex, NP_WEBPATCH_FEX_TOOLS_MAX));
-    const char *no_d3dmetal[NP_WEBPATCH_FEX_TOOLS_MAX], *no_dxvk[NP_WEBPATCH_FEX_TOOLS_MAX];
-    char gap_names[2][NP_WEBPATCH_FEX_TOOLS_MAX * 128];
-    np_webpatch_set_renderer_gaps(
-        no_d3dmetal, np_compat_tools_lacking("d3dmetal", no_d3dmetal, NP_WEBPATCH_FEX_TOOLS_MAX, gap_names[0], sizeof(gap_names[0])),
-        no_dxvk, np_compat_tools_lacking("dxvk", no_dxvk, NP_WEBPATCH_FEX_TOOLS_MAX, gap_names[1], sizeof(gap_names[1])));
+    np_compatpage_publish((const uint8_t *)raw, raw_len);
     size_t patched_len = 0;
     const char *shape = NULL;
     char *patched = np_webpatch_transform((const uint8_t *)raw, raw_len, &patched_len,
@@ -163,7 +156,10 @@ static int try_serve(const char *path, int oflag) {
         return -1;
     if (!np_webpatch_should_patch(path))
         return -1;
-    return open_patched(path);
+    int fd = open_patched(path);
+    if (fd >= 0 && (oflag & O_CLOEXEC))
+        fcntl(fd, F_SETFD, FD_CLOEXEC);
+    return fd;
 }
 
 static mode_t creat_mode(int oflag, va_list ap) {
@@ -241,6 +237,9 @@ static FILE *np_fopen(const char *path, const char *mode) {
         int e = errno;
         close(fd);
         errno = e;
+    } else if (oflag & O_APPEND) {
+        // fopen leaves an append stream at the end, fdopen does not
+        fseeko(fp, 0, SEEK_END);
     }
     return fp;
 }

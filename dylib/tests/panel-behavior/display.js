@@ -2,9 +2,10 @@
 const assert = require('node:assert/strict');
 const { panel, walk, details, FORMS } = require('./harness');
 const emit = process.argv[2];
+const tool = 'neutron-proton-highball-x64-crossover26.3-r19';
 for (const form of Object.keys(FORMS)) {
-  const p = panel(emit, form);
-  const nodes = opts => walk(p.render({ details: details(opts) }));
+  const p = panel(emit, form, undefined, { tools: [tool] });
+  const nodes = opts => walk(p.render({ details: details(opts, { strCompatToolName: tool }) }));
   const control = (opts, label) => nodes(opts).find(n => n.type === 'Section' && n.props.label === label).props.children;
   const last = () => p.written.at(-1).opts;
   const base = 'WINEDEBUG=-all NOTPROTON_DPI=192 NOTPROTON_RETINA=1 %command% --title "keep this"';

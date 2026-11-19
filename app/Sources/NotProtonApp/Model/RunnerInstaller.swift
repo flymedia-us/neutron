@@ -32,10 +32,7 @@ enum RunnerInstaller {
             defer { try? fm.removeItem(at: staging) }
             try copyPayload(from: install.crossOverRoot, to: staging)
             try verifyClone(build: build, root: staging.appending(path: SupportPaths.clonedFolder))
-            if occupied {
-                try fm.removeItem(at: target)
-            }
-            try fm.moveItem(at: staging, to: target)
+            try replaceClone(at: target, with: staging, occupied: occupied)
             return build
         }
 
@@ -63,14 +60,16 @@ enum RunnerInstaller {
         guard FileManager.default.fileExists(atPath: path) else {
             throw StepFailure(step: removeStep, detail: String(localized: "Build \(build) is not set up."))
         }
-        guard !running(target) else {
+        let fm = FileManager.default
+        // Variant runners are clones of this build, so they go with it.
+        let variants = RunnerStore.variantEntries(ofBuild: build, in: runners)
+        guard !running(target), !variants.contains(where: running) else {
             throw StepFailure(
                 step: removeStep,
                 detail: String(localized: "A game or Wine tool is still running on build \(build). Quit it first.")
             )
         }
 
-        let fm = FileManager.default
         let trash = target.deletingLastPathComponent().appending(path: ".\(target.lastPathComponent).removing")
         removeLeftoverRemovals(runners: runners)
         try WriteRefused.catching(path) { try fm.moveItem(at: target, to: trash) }
@@ -84,6 +83,9 @@ enum RunnerInstaller {
             throw error
         }
         try WriteRefused.catching(trash) { try fm.removeItem(at: trash) }
+        for variant in variants {
+            try? fm.removeItem(at: variant)
+        }
         let failures = removeStalePrefixTemplates(runners: runners, libraries: libraries)
         if !failures.isEmpty {
             throw StepFailure(step: removeStep, detail: failures.map(\.detail).joined(separator: "\n"))
@@ -153,8 +155,12 @@ enum RunnerInstaller {
                 guard fstat(root, &info) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
                 guard info.st_mode & S_IFMT == S_IFDIR else { throw POSIXError(.ENOTDIR) }
 
-                for name in try templateDirectoryNames(root) where !kept.contains(name) {
-                    let template = name.wholeMatch(of: #/[a-z]+-[A-Za-z0-9.-]+-(x86_64|aarch64)-unix/#) != nil
+                for name in try templateDirectoryNames(root) {
+                    // compat_run.sh names a variant's template for its build's slot plus +<names>.
+                    let slot = String(name.prefix { $0 != "+" })
+                    if kept.contains(slot) { continue }
+                    let template = slot.wholeMatch(of: #/(crossover|highball)-[A-Za-z0-9.-]+-(x86_64|aarch64)-unix/#) != nil
+                        && (slot == name || name.dropFirst(slot.count).wholeMatch(of: #/(\+[A-Za-z0-9._-]+)+/#) != nil)
                     guard template || (builds.isEmpty && name == SupportPaths.bridgeCacheFolder) else { continue }
                     do {
                         try removeTemplateEntry(name, in: root, device: info.st_dev)
@@ -247,9 +253,10 @@ enum RunnerInstaller {
         if !existing || replacingExisting {
             let staging = runners.appending(path: ".\(target.lastPathComponent).new")
             try? fm.removeItem(at: staging)
+            defer { try? fm.removeItem(at: staging) }
             try copyPayload(from: engine.engineRoot, to: staging)
             let root = staging.appending(path: SupportPaths.clonedFolder)
-            for extra in ["frameworks", "renderers", "manifest.json"] {
+            for extra in ["frameworks", "renderers", "manifest.json", "x87sidecar"] {
                 let source = engine.directory.appending(path: extra)
                 guard fm.fileExists(atPath: source.path(percentEncoded: false)) else { continue }
                 let copied = try Shell.run("/bin/cp", ["-c", "-R", source.path(percentEncoded: false),
@@ -264,11 +271,33 @@ enum RunnerInstaller {
             }
             scrubDownloadMarkers(at: root)
             try writeRuntimeEnv(manifest: root.appending(path: "manifest.json"), root: target.appending(path: SupportPaths.clonedFolder))
-            if occupied { try fm.removeItem(at: target) }
-            try fm.moveItem(at: staging, to: target)
+            try verifyClone(build: build, root: root)
+            try replaceClone(at: target, with: staging, occupied: occupied)
+        } else {
+            try verifyClone(build: build, root: target.appending(path: SupportPaths.clonedFolder))
         }
-        try verifyClone(build: build, root: target.appending(path: SupportPaths.clonedFolder))
         return build
+    }
+
+    private static func replaceClone(at target: URL, with staging: URL, occupied: Bool) throws {
+        let fm = FileManager.default
+        guard occupied else {
+            try fm.moveItem(at: staging, to: target)
+            return
+        }
+
+        // A partial deletion must leave a working runner at the original path.
+        let parent = target.deletingLastPathComponent()
+        let trash = parent.appending(path: ".\(target.lastPathComponent).\(UUID().uuidString).removing")
+        removeLeftoverRemovals(runners: parent)
+        try fm.moveItem(at: target, to: trash)
+        do {
+            try fm.moveItem(at: staging, to: target)
+        } catch {
+            try? fm.moveItem(at: trash, to: target)
+            throw error
+        }
+        try? fm.removeItem(at: trash)
     }
 
     // The manifest's baseEnv, with ${frameworks} pointing into the clone. The run script reads it.

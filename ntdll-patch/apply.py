@@ -30,6 +30,12 @@ PAYLOAD_BY_CLEAN_SHA = {
     "a6678f9d0818e1cdb325e1ce8a07a540433f544b6f756c52a6ab1cfd3f632408": "detour64-fex-41073.bin",
     "6fc64ddf477780ea949cf3b02ce5d6bc147da596c9feb9f7379d3ea7f55433ca": "detour2-hb-r19.bin",
     "e0c057cfd6d12bb62df58b7f71cfcf9a07704b4ffd1095442e784eea3f3f0bd2": "detour32-hb-r19.bin",
+    "4dbe6a8b3e7ee1c1e7f593befd14e01913199da833dd699da966be2026daae2a": "detour2-hb-r31.bin",
+    "b98710ce125d7e270db1e88654bab81e672830b0bffdfccc848cd991b32b4b6f": "detour32-hb-r31.bin",
+    "ef878e75661de8d955a42dc2fc76a84ca95574d48923dfc7f3f7db04a4d4f2b6": "detour2-fex-41303.bin",
+    "0d30cee32e00f3ee7749a58c61b9c49be5388b42e41682c33a1e54e6ea294d31": "detour32-41303.bin",
+    "4e8d8b4b54da99252423c7967d779d34976620a56bedaec38529d1f4b710f26a": "detour32-fex-41303.bin",
+    "3c2d6459113d4418a1135d7d5afe3a47c4a8c017aec389a987efa991bfeceda8": "detour64-fex-41303.bin",
 }
 
 KNOWN_MACHINES = (0x8664, 0x14c, 0xaa64)

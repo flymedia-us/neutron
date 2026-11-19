@@ -97,7 +97,8 @@ enum SupportedRunners {
     static let toolPreference = [
         legacyToolName, "neutron-fex", "neutron-fex-rosetta", "neutron-preview",
         "neutron-fex-41069", "neutron-fex-rosetta-41069", "neutron-preview-41069",
-        "neutron-fex-41073", "neutron-fex-rosetta-41073", "neutron-preview-41073", "neutron-26.3",
+        "neutron-fex-41073", "neutron-fex-rosetta-41073", "neutron-preview-41073",
+        "neutron-fex-41303", "neutron-fex-rosetta-41303", "neutron-preview-41303", "neutron-26.3",
     ]
 
     static let legacyToolName = "neutron"
@@ -279,6 +280,43 @@ enum SupportedRunners {
             ]
         ),
         RunnerBuild(
+            bundleVersion: "27.0.0.41303",
+            releaseVersion: "20261111",
+            flavor: nil,
+            loaderSHA256: "b156a60d1459fec770765e14ed1a1e0925f330ad19563515146bdcfc7920d700",
+            cleanNtdll: [
+                .x86_64Windows: "ef878e75661de8d955a42dc2fc76a84ca95574d48923dfc7f3f7db04a4d4f2b6",
+                .i386Windows: "0d30cee32e00f3ee7749a58c61b9c49be5388b42e41682c33a1e54e6ea294d31",
+            ],
+            patchedNtdll: [
+                .x86_64Windows: "503c4a6f71822b212bcfaaf210ba76e838998fa2c61957a64e5c0da3f9b3a6e9",
+                .i386Windows: "5aee1abf661dd38d2ac3fad311c4bfddce41dc714bd7d622f6fa15f4b2b9a807",
+            ],
+            tools: [
+                CompatTool(name: "neutron-preview-41303", flavor: .rosetta, display: "CrossOver 2026 11 11-X86 - Rosetta"),
+            ]
+        ),
+        RunnerBuild(
+            bundleVersion: "27.0.0.41303",
+            releaseVersion: "20261111",
+            flavor: "fex",
+            loaderSHA256: "db0d2b367d1d8e9030e49894188240c939be1ab5ea1de79605d87fb95af1c505",
+            cleanNtdll: [
+                .x86_64Windows: "ef878e75661de8d955a42dc2fc76a84ca95574d48923dfc7f3f7db04a4d4f2b6",
+                .i386Windows: "4e8d8b4b54da99252423c7967d779d34976620a56bedaec38529d1f4b710f26a",
+                .aarch64Windows: "3c2d6459113d4418a1135d7d5afe3a47c4a8c017aec389a987efa991bfeceda8",
+            ],
+            patchedNtdll: [
+                .x86_64Windows: "503c4a6f71822b212bcfaaf210ba76e838998fa2c61957a64e5c0da3f9b3a6e9",
+                .i386Windows: "c35063d7fda866cd019a8ed1f6014c022a34a74d17037fc5c7f0732f58701f64",
+                .aarch64Windows: "deb1e2dec774ae0b9504f88edd17f02c682d1f78e4839d874d62408a80cf3167",
+            ],
+            tools: [
+                CompatTool(name: "neutron-fex-41303", flavor: .fex, display: "CrossOver 2026 11 11-ARM64 - FEX"),
+                CompatTool(name: "neutron-fex-rosetta-41303", flavor: .rosetta, display: "CrossOver 2026 11 11-ARM64 - Rosetta"),
+            ]
+        ),
+        RunnerBuild(
             bundleVersion: "x64-crossover26.3-r19",
             releaseVersion: "r19",
             flavor: nil,
@@ -294,6 +332,25 @@ enum SupportedRunners {
             tools: [
                 CompatTool(name: "neutron-proton-highball-x64-crossover26.3-r19", flavor: .rosetta,
                            display: "Highball Wine 11 (r19)"),
+            ],
+            runtime: .highball
+        ),
+        RunnerBuild(
+            bundleVersion: "x64-crossover26.3-r31",
+            releaseVersion: "r31",
+            flavor: nil,
+            loaderSHA256: "8b876910aa7948d5ffecfe2838ba519150b3f4149e35a418c47ac2f17a98155a",
+            cleanNtdll: [
+                .x86_64Windows: "4dbe6a8b3e7ee1c1e7f593befd14e01913199da833dd699da966be2026daae2a",
+                .i386Windows: "b98710ce125d7e270db1e88654bab81e672830b0bffdfccc848cd991b32b4b6f",
+            ],
+            patchedNtdll: [
+                .x86_64Windows: "a59baf0d6cba1ec531fe23ddfae42cbe439ff1542dcc8811bd7fdb9ebf7a3672",
+                .i386Windows: "da2c194251aa17a119615131459d5ec67477967b33ae66a5b6ce381d7c7b83be",
+            ],
+            tools: [
+                CompatTool(name: "neutron-proton-highball-x64-crossover26.3-r31", flavor: .rosetta,
+                           display: "Highball Wine 11 (r31)"),
             ],
             runtime: .highball
         ),

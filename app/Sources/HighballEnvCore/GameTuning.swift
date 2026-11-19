@@ -45,6 +45,12 @@ public enum GameTuning {
                 overrides.append(entry)
             case .dxvkConfig(let exe, let options):
                 settings.dxvkAppConfig[exe, default: [:]].merge(options) { $1 }
+            case .frameCap(let fps):
+                if userEnvironment["NOTPROTON_FPS_LIMIT"].flatMap(Int.init).map({ (0...1000).contains($0) }) != true,
+                   settings.fpsCap == 0 {
+                    settings.fpsCap = fps
+                    result.notes.append("highball-db frame cap \(fps)")
+                }
             case .renderer, .note, .pin:
                 break
             case .installer, .registry, .winetricks, .winver, .file, .copy:
@@ -73,6 +79,7 @@ public enum GameTuning {
         case .note: "note"
         case .dllOverride: "dlloverride"
         case .dxvkConfig: "dxvkconfig"
+        case .frameCap: "framecap"
         }
     }
 }

@@ -281,6 +281,20 @@ struct SteamInstallerTests {
         #expect(left.contains("us.flymedia.neutron.keep"))
     }
 
+    @Test("Our own dylib at a bundle's old location does not stop the install")
+    func acceptsOwnInsertFromMovedBundle() throws {
+        let work = try scratchDirectory("moved")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let plist = work.appending(path: "Info.plist")
+        let old = "/Applications/Steam.app/Contents/MacOS/neutron.dylib"
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: [SteamBundle.environmentKey: [SteamBundle.insertKey: old]], format: .xml, options: 0)
+        try data.write(to: plist)
+
+        try SteamInstaller.assertInsertIsDeployedOrAbsent(
+            at: plist, dylib: URL(filePath: "/Volumes/Games/Steam.app/Contents/MacOS/neutron.dylib"))
+    }
+
     @Test("An insert belonging to something else stops the install and is left alone")
     func refusesForeignInsert() async throws {
         let work = try scratchDirectory("install")
@@ -510,6 +524,28 @@ struct SteamInstallerTests {
         )
 
         try Data("a different build".utf8).write(to: fixture.deployedDylib)
+
+        #expect(
+            try SteamInstaller.needsPatching(
+                plist: fixture.plist,
+                dylib: fixture.deployedDylib,
+                shipping: fixture.payload.dylib,
+                app: fixture.app
+            )
+        )
+    }
+
+    @Test("A Steam whose seal was broken after the insert landed is patched again")
+    func brokenSealIsPatched() async throws {
+        let work = try scratchDirectory("install")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let fixture = try await self.fixture(into: work)
+
+        _ = try install(fixture)
+        let resource = fixture.app.appending(path: "Contents/Resources/notproton-seal-test")
+        try FileManager.default.createDirectory(
+            at: resource.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("unsealed".utf8).write(to: resource)
 
         #expect(
             try SteamInstaller.needsPatching(

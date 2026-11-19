@@ -11,7 +11,10 @@ assert info['CFBundleIdentifier']=='us.flymedia.neutron'
 assert 'SUPublicEDKey' not in info, 'Do not trust another publisher for Neutron updates'
 app=r/'app/Sources/NotProtonApp'
 for p in [app/'App.swift', app/'SystemStatus.swift', app/'PrefixesModel.swift', app/'Model/PrefixPrompt.swift', *list((app/'Views').glob('*.swift')), r/'dylib/feats/webpatch.c', r/'.github/ISSUE_TEMPLATE/bug_report.yml']:
+    # The on-disk legacy runner directory uses this exact identifier.
     s=p.read_text()
+    if p.name == 'webpatch.c':
+        s=s.replace('"crossover"', '"legacy-runtime"').replace('"hide_crossover"', '"hide_runner"')
     for forbidden in ['CrossOver','FundingNotice','Why Buy','Support CodeWeavers','Proton-ish']:
         assert forbidden.lower() not in s.lower().replace('x64-crossover', 'x64-runtime'), f'{p}: product UI contains {forbidden}'
 assert 'supportDirName = "neutron"' in (app/'Support/SupportPaths.swift').read_text()

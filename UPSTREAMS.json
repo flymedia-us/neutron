@@ -1,18 +1,19 @@
 {
   "primary": {
     "repository": "NotProtonNot/NotProton",
-    "commit": "730f10055b851e7f8ba69bf1249acc1583d2108e",
-    "version": "1.2.0",
+    "commit": "59ab48be733e587e4edc8ac457119bd2a204b328",
+    "version": "1.2.6",
     "sync": "scripts/sync/notproton.sh"
   },
   "highball_integration": {
     "repository": "MagnusPladsen/Proton-ish",
     "commit": "e15f171",
+    "additional_commits": ["be0ed3faa3d4604c8958cc0aebd1bdb3126b3b91", "391fe08f9f1017ad216c648a3ec6cd635150bfd2"],
     "scope": "Highball runtime discovery, setup/downloads, launch environment, per-game database, renderer controls and associated tests; no automatic full-project merges"
   },
   "runtime": {
     "repository": "gauthierpiarrette/highball",
-    "version": "0.10.22",
-    "engine": "x64-crossover26.3-r19"
+    "version": "0.10.26",
+    "engine": "x64-crossover26.3-r31"
   }
 }
